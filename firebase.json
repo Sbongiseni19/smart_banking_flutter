@@ -1,0 +1,16 @@
+{
+  "hosting": {
+    "public": "Sbongiseni19/BankingApp",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
