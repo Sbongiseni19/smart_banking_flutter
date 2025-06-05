@@ -31,8 +31,40 @@
 
   <title>smart_banking_app</title>
   <link rel="manifest" href="manifest.json">
+ <!-- Firebase Core -->
+  
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
+
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyBPTLW0QAgf5rs_fKUsPclFHHpiH0QqMXU",
+    authDomain: "smartbankingapp-b25a0.firebaseapp.com",
+    projectId: "smartbankingapp-b25a0",
+    storageBucket: "smartbankingapp-b25a0.appspot.com", // ✅ Correct",
+    messagingSenderId: "60243541943",
+    appId: "1:60243541943:web:2d0022da90c8ba12ae3232"
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+</script>
+
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <script id="flutter_script" src="flutter_bootstrap.js" async></script>
+
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('firebase-messaging-sw.js')
+      .then(function(registration) {
+        console.log('Service Worker Registered with scope:', registration.scope);
+      }).catch(function(err) {
+        console.log('Service Worker registration failed:', err);
+      });
+  }
+</script>
+
 </body>
 </html>
