@@ -3,14 +3,15 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'firebase_options.dart';
-import 'screens/index_page.dart'; // <-- Added IndexPage import
+import 'screens/index_page.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/appointment_screen.dart';
 import 'screens/consultant_dashboard_screen.dart';
+import 'screens/phone_verification_screen.dart'; // <-- Import phone verification
 
-// Add these 4:
+// Additional imports for other pages
 import 'screens/book_slot_page.dart';
 import 'screens/nearby_banks_page.dart';
 import 'screens/previous_bookings_page.dart';
@@ -32,15 +33,20 @@ void main() async {
 
   NotificationSettings settings =
       await FirebaseMessaging.instance.requestPermission();
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    // Handle foreground message
+  });
   print('🛡️ Permission granted: ${settings.authorizationStatus}');
 
   String? token = await FirebaseMessaging.instance.getToken();
   print("🔑 FCM Token: $token");
 
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
@@ -56,25 +62,28 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Smart Banking App',
       debugShowCheckedModeBanner: false,
-      initialRoute: '/', // <-- Starting at IndexPage now
+      initialRoute: '/',
       routes: {
-        '/': (context) => const IndexPage(), // <-- Changed from LoginPage
-        '/login': (context) => LoginPage(),
-        '/register': (context) => RegisterPage(),
+        '/': (context) => const IndexPage(),
+        '/login': (context) => LoginScreen(),
+        '/register': (context) => RegisterScreen(),
         '/dashboard': (context) {
           final args = ModalRoute.of(context)!.settings.arguments
               as Map<String, dynamic>?;
           final userName = args?['userName'] ?? 'Guest';
           return DashboardScreen(userName: userName);
         },
-        '/appointment': (context) => AppointmentScreen(),
-        '/consultant_dashboard': (context) => ConsultantDashboardScreen(),
+        '/appointment': (context) => const AppointmentScreen(),
+        '/consultant_dashboard': (context) => const ConsultantDashboardScreen(),
+        '/verifyPhone': (context) =>
+            const PhoneVerificationScreen(), // <-- New route for phone verification
 
-        // 🆕 Add the 4 user dashboard option routes:
+        // Other routes
         '/bookSlot': (context) => const BookSlotPage(),
         '/nearbyBanks': (context) => NearbyBanksPage(),
         '/previousBookings': (context) => const PreviousBookingsPage(),
         '/pendingAppointments': (context) => const PendingAppointmentsPage(),
+        '/phoneVerification': (context) => const PhoneVerificationScreen(),
       },
     );
   }

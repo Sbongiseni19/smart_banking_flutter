@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BookSlotPage extends StatefulWidget {
   const BookSlotPage({super.key});
@@ -9,131 +10,90 @@ class BookSlotPage extends StatefulWidget {
 
 class _BookSlotPageState extends State<BookSlotPage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _idController = TextEditingController();
-  final _emailController = TextEditingController();
 
-  String? _selectedBank;
-  String? _selectedService;
-  DateTime? _selectedDateTime;
+  final nameController = TextEditingController();
+  final emailController = TextEditingController();
+  final idController = TextEditingController();
+  final bankController = TextEditingController();
+  final serviceController = TextEditingController();
+  final dateController = TextEditingController();
+  final timeController = TextEditingController();
 
-  final List<String> _banks = [
-    'FNB',
-    'ABSA',
-    'Standard Bank',
-    'Capitec',
-    'Nedbank'
-  ];
-  final List<String> _services = [
-    'Open Account',
-    'Loan Application',
-    'Card Replacement',
-    'Deposit Assistance'
-  ];
+  Future<void> _submitBooking() async {
+    if (_formKey.currentState!.validate()) {
+      await FirebaseFirestore.instance.collection('bookings').add({
+        'userName': nameController.text,
+        'email': emailController.text,
+        'idNumber': idController.text,
+        'bank': bankController.text,
+        'service': serviceController.text,
+        'date': dateController.text,
+        'time': timeController.text,
+        'status': 'Pending',
+        'createdAt': FieldValue.serverTimestamp(), // Required for sorting
+      });
 
-  Future<void> _pickDateTime() async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now().add(Duration(days: 1)),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(Duration(days: 30)),
-    );
-
-    if (date == null) return;
-
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
-
-    if (time == null) return;
-
-    setState(() {
-      _selectedDateTime =
-          DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    });
-  }
-
-  void _submitForm() {
-    if (_formKey.currentState!.validate() &&
-        _selectedBank != null &&
-        _selectedService != null &&
-        _selectedDateTime != null) {
-      // TODO: Save booking to database
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Booking Submitted')),
+        const SnackBar(content: Text('✅ Booking submitted successfully!')),
       );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please complete all fields')),
-      );
+
+      _formKey.currentState!.reset();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Book Appointment')),
+      appBar: AppBar(
+          title: const Text('Book Appointment'),
+          backgroundColor: Colors.indigo),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Full Name'),
-                validator: (value) => value!.isEmpty ? 'Required' : null,
-              ),
-              TextFormField(
-                controller: _idController,
-                decoration: const InputDecoration(labelText: 'ID Number'),
-                keyboardType: TextInputType.number,
-                validator: (value) => value!.isEmpty ? 'Required' : null,
-              ),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email Address'),
-                keyboardType: TextInputType.emailAddress,
-                validator: (value) => value!.isEmpty || !value.contains('@')
-                    ? 'Enter a valid email'
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _selectedBank,
-                hint: const Text('Select Bank'),
-                items: _banks.map((bank) {
-                  return DropdownMenuItem(value: bank, child: Text(bank));
-                }).toList(),
-                onChanged: (value) => setState(() => _selectedBank = value),
-                validator: (value) =>
-                    value == null ? 'Please select a bank' : null,
-              ),
-              DropdownButtonFormField<String>(
-                value: _selectedService,
-                hint: const Text('Select Service'),
-                items: _services.map((service) {
-                  return DropdownMenuItem(value: service, child: Text(service));
-                }).toList(),
-                onChanged: (value) => setState(() => _selectedService = value),
-                validator: (value) =>
-                    value == null ? 'Please select a service' : null,
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                title: Text(_selectedDateTime == null
-                    ? 'Pick Appointment Date & Time'
-                    : 'Selected: ${_selectedDateTime.toString()}'),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: _pickDateTime,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _submitForm,
-                child: const Text('Submit Booking'),
-              ),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'Full Name'),
+                    validator: (val) => val!.isEmpty ? 'Required' : null),
+                TextFormField(
+                    controller: emailController,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    validator: (val) => val!.isEmpty ? 'Required' : null),
+                TextFormField(
+                    controller: idController,
+                    decoration: const InputDecoration(labelText: 'ID Number'),
+                    validator: (val) => val!.isEmpty ? 'Required' : null),
+                TextFormField(
+                    controller: bankController,
+                    decoration: const InputDecoration(labelText: 'Bank Branch'),
+                    validator: (val) => val!.isEmpty ? 'Required' : null),
+                TextFormField(
+                    controller: serviceController,
+                    decoration:
+                        const InputDecoration(labelText: 'Service Required'),
+                    validator: (val) => val!.isEmpty ? 'Required' : null),
+                TextFormField(
+                    controller: dateController,
+                    decoration:
+                        const InputDecoration(labelText: 'Date (YYYY-MM-DD)'),
+                    validator: (val) => val!.isEmpty ? 'Required' : null),
+                TextFormField(
+                    controller: timeController,
+                    decoration: const InputDecoration(
+                        labelText: 'Time (e.g. 09:00 AM)'),
+                    validator: (val) => val!.isEmpty ? 'Required' : null),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _submitBooking,
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
+                  child: const Text('Submit Booking'),
+                ),
+              ],
+            ),
           ),
         ),
       ),

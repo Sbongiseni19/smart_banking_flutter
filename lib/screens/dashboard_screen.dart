@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Add this import
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+
 import 'package:smart_banking_app/screens/book_slot_page.dart';
 import 'package:smart_banking_app/screens/nearby_banks_page.dart';
 import 'package:smart_banking_app/screens/previous_bookings_page.dart';
 import 'package:smart_banking_app/screens/pending_appointments_page.dart';
-import 'package:smart_banking_app/screens/login_screen.dart'; // Keep this for navigation
+import 'package:smart_banking_app/screens/login_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String userName;
@@ -26,11 +28,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   bool _isLoading = true;
   bool _hasError = false;
+  late stt.SpeechToText _speech;
+  bool _isVoiceEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _initLocationService();
+    _speech = stt.SpeechToText();
+    _initVoiceAssistant();
   }
 
   @override
@@ -89,6 +95,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _hasError = false;
       });
       await _getAddressFromLatLng(position);
+      _checkBankProximity(position);
     });
   }
 
@@ -122,6 +129,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _initVoiceAssistant() async {
+    bool available = await _speech.initialize();
+    if (available) {
+      setState(() {
+        _isVoiceEnabled = true;
+      });
+
+      _speech.listen(
+        onResult: (result) {
+          String command = result.recognizedWords.toLowerCase();
+          _handleVoiceCommand(command);
+        },
+        listenMode: stt.ListenMode.confirmation,
+      );
+    } else {
+      setState(() {
+        _isVoiceEnabled = false;
+      });
+    }
+  }
+
+  void _handleVoiceCommand(String command) {
+    if (command.contains("book")) {
+      Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const BookSlotPage()));
+    } else if (command.contains("nearby")) {
+      Navigator.push(
+          context, MaterialPageRoute(builder: (_) => NearbyBanksPage()));
+    } else if (command.contains("pending")) {
+      Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const PendingAppointmentsPage()));
+    } else if (command.contains("history") || command.contains("previous")) {
+      Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const PreviousBookingsPage()));
+    } else if (command.contains("logout")) {
+      _showLogoutDialog();
+    }
+  }
+
+  void _checkBankProximity(Position position) {
+    const bankLat = -26.2041;
+    const bankLng = 28.0473;
+
+    double distance = Geolocator.distanceBetween(
+        position.latitude, position.longitude, bankLat, bankLng);
+
+    if (distance < 500) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("You're near a supported bank. Need assistance?"),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
   }
@@ -139,11 +202,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           TextButton(
             onPressed: () async {
-              Navigator.of(context).pop(); // Close dialog
+              Navigator.of(context).pop();
               await _logout();
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => LoginPage()),
+                MaterialPageRoute(builder: (_) => LoginScreen()),
               );
             },
             child: const Text('Logout'),
@@ -192,10 +255,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: _showLogoutDialog,
+          Row(
+            children: [
+              Icon(
+                _isVoiceEnabled ? Icons.mic : Icons.mic_off,
+                color: _isVoiceEnabled ? Colors.greenAccent : Colors.grey,
+              ),
+              IconButton(
+                icon: const Icon(Icons.logout),
+                tooltip: 'Logout',
+                onPressed: _showLogoutDialog,
+              ),
+            ],
           ),
         ],
       ),

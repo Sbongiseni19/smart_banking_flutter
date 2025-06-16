@@ -1,85 +1,116 @@
+import 'dart:html'; // Required for HtmlElementView on web
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth_web/firebase_auth_web.dart';
+import 'package:firebase_auth_platform_interface/firebase_auth_platform_interface.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'login_screen.dart';
 
-class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({Key? key}) : super(key: key);
 
   @override
-  State<RegisterPage> createState() => _RegisterPageState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {
-  final _formKey = GlobalKey<FormState>();
-
-  final TextEditingController _fullNameController = TextEditingController();
-  final TextEditingController _idController = TextEditingController();
+class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _otpController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _idController = TextEditingController();
 
+  late RecaptchaVerifier webRecaptchaVerifier;
+  late ConfirmationResult confirmationResult;
+
+  bool _otpSent = false;
   bool _isLoading = false;
-  String? _errorMessage;
 
-  Future<void> _registerUser() async {
-    if (!_formKey.currentState!.validate()) return;
+  @override
+  void initState() {
+    super.initState();
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    // ✅ Initialize reCAPTCHA verifier (for Web)
+    if (FirebaseAuth.instance is FirebaseAuthWeb) {
+      webRecaptchaVerifier = RecaptchaVerifier(
+        auth: FirebaseAuthPlatform.instance, // ✅ FIXED: required 'auth'
+        container: 'recaptcha-container', // Match index.html div
+        size: RecaptchaVerifierSize.normal,
+        theme: RecaptchaVerifierTheme.light,
+        onSuccess: () => print('✅ reCAPTCHA Completed!'),
+        onError: (error) => print('❌ reCAPTCHA Error: $error'),
+        onExpired: () => print('⚠️ reCAPTCHA Expired'),
+      );
+    }
+  }
+
+  Future<void> _sendOTP() async {
+    setState(() => _isLoading = true);
 
     try {
-      UserCredential userCredential =
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      final phone = _phoneController.text.trim();
+      if (phone.isEmpty) throw Exception("Phone number cannot be empty");
+
+      confirmationResult = await FirebaseAuth.instance.signInWithPhoneNumber(
+        phone,
+        webRecaptchaVerifier,
       );
 
-      // Store additional info in Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .set({
-        'full_name': _fullNameController.text.trim(),
-        'id_number': _idController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'email': _emailController.text.trim(),
-        'created_at': FieldValue.serverTimestamp(),
-      });
+      setState(() => _otpSent = true);
 
-      // Navigate to Login after registration
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registration successful!')),
+        SnackBar(content: Text("✅ OTP sent to $phone")),
       );
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
-    } on FirebaseAuthException catch (e) {
-      setState(() {
-        _errorMessage = e.message;
-      });
     } catch (e) {
-      setState(() {
-        _errorMessage = 'An unexpected error occurred.';
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Failed to send OTP: $e")),
+      );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _verifyOTP() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final otp = _otpController.text.trim();
+      if (otp.isEmpty) throw Exception("Please enter the OTP");
+
+      final userCredential = await confirmationResult.confirm(otp);
+      final user = userCredential.user;
+
+      if (user != null) {
+        // ✅ Save extra user data to Firestore
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'phone': user.phoneNumber,
+          'name': _nameController.text.trim(),
+          'id_number': _idController.text.trim(),
+          'created_at': FieldValue.serverTimestamp(),
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("✅ Registered! UID: ${user.uid}")),
+        );
+
+        Navigator.pushNamed(context, '/dashboard', arguments: {
+          'userName': _nameController.text,
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ OTP verification failed: $e")),
+      );
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   void dispose() {
-    _fullNameController.dispose();
-    _idController.dispose();
     _phoneController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
+    _otpController.dispose();
+    _nameController.dispose();
+    _idController.dispose();
     super.dispose();
   }
 
@@ -87,71 +118,57 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Register')),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              if (_errorMessage != null)
-                Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _fullNameController,
-                decoration: const InputDecoration(labelText: 'Full Name'),
-                validator: (value) =>
-                    value!.isEmpty ? 'Enter your full name' : null,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: 'Full Name'),
+            ),
+            TextField(
+              controller: _idController,
+              decoration: const InputDecoration(labelText: 'ID Number'),
+              keyboardType: TextInputType.number,
+            ),
+            TextField(
+              controller: _phoneController,
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                hintText: '+27XXXXXXXXX',
               ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _idController,
-                decoration: const InputDecoration(labelText: 'ID Number'),
-                validator: (value) =>
-                    value!.isEmpty ? 'Enter your ID number' : null,
+              keyboardType: TextInputType.phone,
+            ),
+            const SizedBox(height: 16),
+            if (_otpSent)
+              TextField(
+                controller: _otpController,
+                decoration: const InputDecoration(labelText: 'Enter OTP'),
+                keyboardType: TextInputType.number,
               ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Phone Number'),
-                validator: (value) =>
-                    value!.isEmpty ? 'Enter your phone number' : null,
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: (value) =>
-                    value!.isEmpty ? 'Enter your email' : null,
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Password'),
-                validator: (value) => value!.length < 6
-                    ? 'Password must be at least 6 characters'
-                    : null,
-              ),
-              const SizedBox(height: 20),
+            const SizedBox(height: 20),
+            if (_isLoading)
+              const CircularProgressIndicator()
+            else if (!_otpSent)
               ElevatedButton(
-                onPressed: _isLoading ? null : _registerUser,
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Register'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                  );
-                },
-                child: const Text('Already have an account? Login'),
+                onPressed: _sendOTP,
+                child: const Text('Send OTP'),
               )
-            ],
-          ),
+            else
+              ElevatedButton(
+                onPressed: _verifyOTP,
+                child: const Text('Verify & Register'),
+              ),
+            const SizedBox(height: 20),
+            // Placeholder for reCAPTCHA
+            const Text("reCAPTCHA (Web Only):"),
+            const SizedBox(height: 10),
+            if (FirebaseAuth.instance is FirebaseAuthWeb)
+              const SizedBox(
+                height: 100,
+                child: HtmlElementView(viewType: 'recaptcha-container'),
+              ),
+          ],
         ),
       ),
     );

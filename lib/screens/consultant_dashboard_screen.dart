@@ -1,72 +1,131 @@
-import '../services/booking_data.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
-import '../services/location_service.dart'; // ✅ Correct path for LocationService
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class ConsultantDashboardScreen extends StatelessWidget {
+class ConsultantDashboardScreen extends StatefulWidget {
   const ConsultantDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final bookings = BookingData().appointments;
+  State<ConsultantDashboardScreen> createState() =>
+      _ConsultantDashboardScreenState();
+}
 
+class _ConsultantDashboardScreenState extends State<ConsultantDashboardScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchTerm = '';
+
+  final Stream<QuerySnapshot> _bookingsStream = FirebaseFirestore.instance
+      .collection('bookings')
+      .orderBy('createdAt', descending: true)
+      .snapshots();
+
+  void _updateBookingStatus(String docId, String newStatus) {
+    FirebaseFirestore.instance
+        .collection('bookings')
+        .doc(docId)
+        .update({'status': newStatus});
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Consultant Dashboard'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.location_on),
-            tooltip: 'Get My Location',
-            onPressed: () async {
-              try {
-                Position? position = await LocationService.getCurrentLocation();
-                if (position != null) {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('📍 Your Location'),
-                      content: Text(
-                        'Latitude: ${position.latitude}\nLongitude: ${position.longitude}',
-                      ),
-                    ),
-                  );
-                }
-              } catch (e) {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('⚠️ Error'),
-                    content: Text(e.toString()),
-                  ),
-                );
-              }
-            },
-          ),
-        ],
+        backgroundColor: Colors.indigo,
       ),
-      body: bookings.isEmpty
-          ? const Center(child: Text('No bookings available.'))
-          : ListView.builder(
-              itemCount: bookings.length,
-              itemBuilder: (context, index) {
-                final booking = bookings[index];
-                return Card(
-                  margin: const EdgeInsets.all(8),
-                  child: ListTile(
-                    title: Text(booking['name'] ?? ''),
-                    subtitle: Text(
-                        'ID: ${booking['id'] ?? ''} | Email: ${booking['email'] ?? ''}'),
-                    trailing: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text('Bank: ${booking['bank'] ?? ''}'),
-                        Text('Service: ${booking['service'] ?? ''}'),
-                      ],
-                    ),
-                  ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                labelText: 'Search by name, bank, or service',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchTerm = '');
+                  },
+                ),
+              ),
+              onChanged: (value) {
+                setState(() => _searchTerm = value.toLowerCase());
+              },
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _bookingsStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('No bookings found.'));
+                }
+
+                final bookings = snapshot.data!.docs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final userName = data['userName']?.toLowerCase() ?? '';
+                  final bank = data['bank']?.toLowerCase() ?? '';
+                  final service = data['service']?.toLowerCase() ?? '';
+                  return userName.contains(_searchTerm) ||
+                      bank.contains(_searchTerm) ||
+                      service.contains(_searchTerm);
+                }).toList();
+
+                if (bookings.isEmpty) {
+                  return const Center(
+                      child: Text('No results match your search.'));
+                }
+
+                return ListView.builder(
+                  itemCount: bookings.length,
+                  itemBuilder: (context, index) {
+                    final doc = bookings[index];
+                    final data = doc.data() as Map<String, dynamic>;
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      child: ListTile(
+                        leading: const Icon(Icons.account_circle,
+                            color: Colors.indigo),
+                        title: Text(data['userName'] ?? 'Unknown'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Bank: ${data['bank']}'),
+                            Text('Service: ${data['service']}'),
+                            Text('Date: ${data['date']} at ${data['time']}'),
+                            Text('Email: ${data['email']}'),
+                            Text('ID: ${data['idNumber']}'),
+                          ],
+                        ),
+                        trailing: DropdownButton<String>(
+                          value: data['status'],
+                          onChanged: (String? newValue) {
+                            if (newValue != null) {
+                              _updateBookingStatus(doc.id, newValue);
+                            }
+                          },
+                          items: <String>['Pending', 'Completed', 'Cancelled']
+                              .map<DropdownMenuItem<String>>((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(value),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
+          ),
+        ],
+      ),
     );
   }
 }

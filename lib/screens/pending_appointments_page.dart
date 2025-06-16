@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 class PendingAppointmentsPage extends StatefulWidget {
   const PendingAppointmentsPage({super.key});
@@ -9,21 +11,6 @@ class PendingAppointmentsPage extends StatefulWidget {
 }
 
 class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
-  final List<Map<String, String>> pendingAppointments = [
-    {
-      'bankName': 'Capitec - Mamelodi',
-      'date': '2025-06-10',
-      'time': '09:00 AM',
-      'status': 'Pending',
-    },
-    {
-      'bankName': 'FNB - Menlyn',
-      'date': '2025-06-12',
-      'time': '11:30 AM',
-      'status': 'Pending',
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -31,32 +18,57 @@ class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
         title: const Text('Pending Appointments'),
         backgroundColor: Colors.indigo,
       ),
-      body: pendingAppointments.isEmpty
-          ? const Center(child: Text('No pending appointments.'))
-          : ListView.builder(
-              itemCount: pendingAppointments.length,
-              itemBuilder: (context, index) {
-                final appointment = pendingAppointments[index];
-                return Card(
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: ListTile(
-                    leading:
-                        const Icon(Icons.pending_actions, color: Colors.orange),
-                    title: Text('${appointment['bankName']}'),
-                    subtitle: Text(
-                        'Date: ${appointment['date']} at ${appointment['time']}'),
-                    trailing: Text(
-                      appointment['status'] ?? '',
-                      style: const TextStyle(
-                        color: Colors.orange,
-                        fontWeight: FontWeight.bold,
-                      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('appointments')
+            .where('status', isEqualTo: 'pending')
+            .orderBy('dateTime')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text('Error fetching appointments.'));
+          }
+
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final data = snapshot.data;
+
+          if (data == null || data.docs.isEmpty) {
+            return const Center(child: Text('No pending appointments.'));
+          }
+
+          return ListView.builder(
+            itemCount: data.docs.length,
+            itemBuilder: (context, index) {
+              final doc = data.docs[index];
+              final appointment = doc.data() as Map<String, dynamic>;
+
+              final dateTime = DateTime.parse(appointment['dateTime']);
+              final formattedDate = DateFormat('yyyy-MM-dd').format(dateTime);
+              final formattedTime = DateFormat('hh:mm a').format(dateTime);
+
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ListTile(
+                  leading:
+                      const Icon(Icons.pending_actions, color: Colors.orange),
+                  title: Text('${appointment['bank']}'),
+                  subtitle: Text('Date: $formattedDate at $formattedTime'),
+                  trailing: Text(
+                    appointment['status'] ?? '',
+                    style: const TextStyle(
+                      color: Colors.orange,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

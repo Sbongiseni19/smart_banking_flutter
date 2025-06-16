@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
+import 'staff_login_screen.dart';
 
 class IndexPage extends StatelessWidget {
   const IndexPage({super.key});
@@ -12,6 +13,19 @@ class IndexPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Smart Banking App'),
         backgroundColor: Colors.indigo.shade700,
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const StaffLoginScreen()),
+              );
+            },
+            child: const Text('Staff Login',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
       body: Center(
         child: Padding(
@@ -40,7 +54,7 @@ class IndexPage extends StatelessWidget {
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => LoginPage()),
+                    MaterialPageRoute(builder: (_) => LoginScreen()),
                   );
                 },
               ),
