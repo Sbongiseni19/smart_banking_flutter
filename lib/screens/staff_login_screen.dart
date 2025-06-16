@@ -20,7 +20,8 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     if (email == 'staff@bank.com' && password == '1234') {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const StaffDashboardScreen()),
+        MaterialPageRoute(
+            builder: (context) => const ConsultantDashboardScreen()),
       );
     } else {
       setState(() {
@@ -32,7 +33,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Staff Login')),
+      appBar: AppBar(title: const Text('ADMIN LOGIN PAGE!!')),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
@@ -41,7 +42,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
               Text(errorText, style: const TextStyle(color: Colors.red)),
             TextField(
               controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
+              decoration: const InputDecoration(labelText: 'Staff Username'),
             ),
             const SizedBox(height: 10),
             TextField(
