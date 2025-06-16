@@ -21,7 +21,8 @@ class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('appointments')
-            .where('status', isEqualTo: 'pending')
+            .where('status',
+                isEqualTo: 'Pending') // Capital "P" if stored that way
             .orderBy('dateTime')
             .snapshots(),
         builder: (context, snapshot) {
@@ -45,7 +46,8 @@ class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
               final doc = data.docs[index];
               final appointment = doc.data() as Map<String, dynamic>;
 
-              final dateTime = DateTime.parse(appointment['dateTime']);
+              final Timestamp timestamp = appointment['dateTime'];
+              final dateTime = timestamp.toDate();
               final formattedDate = DateFormat('yyyy-MM-dd').format(dateTime);
               final formattedTime = DateFormat('hh:mm a').format(dateTime);
 
