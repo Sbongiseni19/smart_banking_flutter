@@ -12,19 +12,20 @@ class PhoneVerificationScreen extends StatefulWidget {
 }
 
 class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
-  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _codeController = TextEditingController();
 
+  String? _maskedPhone;
+  String? _realPhone;
   String? _verificationId;
   bool _codeSent = false;
   bool _isLoading = false;
 
-  Future<void> _verifyPhone() async {
-    final phone = _phoneController.text.trim();
-
-    if (phone.isEmpty) {
+  Future<void> _fetchPhoneAndSendOTP() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your phone number.')),
+        const SnackBar(content: Text('Please enter your email address.')),
       );
       return;
     }
@@ -32,16 +33,45 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // Get the current user by re-authenticating with email (if not already signed in)
+      final methods =
+          await FirebaseAuth.instance.fetchSignInMethodsForEmail(email);
+      if (methods.isEmpty) {
+        throw FirebaseAuthException(
+            code: 'user-not-found', message: 'No user found for that email.');
+      }
+
+      // Try getting user from current session
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user == null || user.email != email) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please login first with this email.')),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      if (user.phoneNumber == null) {
+        throw FirebaseAuthException(
+            code: 'no-phone',
+            message: 'No phone number linked to this account.');
+      }
+
+      _realPhone = user.phoneNumber;
+      _maskedPhone = _realPhone!.replaceRange(
+          0, _realPhone!.length - 3, '*' * (_realPhone!.length - 3));
+
       await FirebaseAuth.instance.verifyPhoneNumber(
-        phoneNumber: phone,
+        phoneNumber: _realPhone!,
         verificationCompleted: (PhoneAuthCredential credential) async {
-          // Web auto-verification is not supported
+          // Skip auto verify on web
         },
         verificationFailed: (FirebaseAuthException e) {
-          setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Verification failed: ${e.message}')),
           );
+          setState(() => _isLoading = false);
         },
         codeSent: (String verificationId, int? resendToken) {
           setState(() {
@@ -54,10 +84,10 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
           _verificationId = verificationId;
         },
       );
-    } catch (e) {
+    } on FirebaseAuthException catch (e) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending OTP: $e')),
+        SnackBar(content: Text('Error: ${e.message}')),
       );
     }
   }
@@ -78,14 +108,11 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
 
       if (user != null) {
         if (user.phoneNumber == null) {
-          // Link phone number if not linked
           await user.linkWithCredential(credential);
         } else {
-          // Just reauthenticate with phone credential
           await user.reauthenticateWithCredential(credential);
         }
       } else {
-        // Fallback: sign in directly with phone credential
         await auth.FirebaseAuth.instance.signInWithCredential(credential);
       }
 
@@ -112,18 +139,23 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
           children: [
             if (!_codeSent) ...[
               TextField(
-                controller: _phoneController,
+                controller: _emailController,
                 decoration: const InputDecoration(
-                  labelText: 'Phone number',
-                  hintText: '+27XXXXXXXXX',
+                  labelText: 'Enter your email',
                 ),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _isLoading ? null : _verifyPhone,
-                child: const Text('Send OTP'),
+                onPressed: _isLoading ? null : _fetchPhoneAndSendOTP,
+                child: const Text('Send OTP to Linked Phone'),
               ),
             ] else ...[
+              Text(
+                'OTP sent to: $_maskedPhone',
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 12),
               TextField(
                 controller: _codeController,
                 decoration: const InputDecoration(
