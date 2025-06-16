@@ -25,7 +25,6 @@ class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            print('Snapshot error: ${snapshot.error}');
             return const Center(child: Text('Error fetching appointments.'));
           }
 
@@ -39,74 +38,124 @@ class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
             return const Center(child: Text('No pending appointments.'));
           }
 
-          // Parse and sort documents by combined DateTime from 'date' and 'time'
-          final docsWithDateTime = data.docs
-              .map((doc) {
-                final appointment = doc.data() as Map<String, dynamic>;
+          // Parse & group by day
+          final Map<String, List<Map<String, dynamic>>> grouped = {};
 
-                // Parse date string (e.g., "2025-06-19")
-                final dateParts = appointment['date']?.split('-');
-                if (dateParts == null || dateParts.length != 3) {
-                  return null; // invalid date format
-                }
+          for (var doc in data.docs) {
+            final appointment = doc.data() as Map<String, dynamic>;
 
-                final year = int.tryParse(dateParts[0]) ?? 0;
-                final month = int.tryParse(dateParts[1]) ?? 0;
-                final day = int.tryParse(dateParts[2]) ?? 0;
+            // Parse date & time
+            final dateParts = (appointment['date'] ?? '').split('-');
+            if (dateParts.length != 3) continue;
 
-                // Parse time string (e.g., "5:20 AM")
-                final timeString = appointment['time'] ?? '12:00 AM';
-                DateTime parsedTime;
-                try {
-                  parsedTime = DateFormat.jm().parse(timeString);
-                } catch (_) {
-                  parsedTime = DateTime(0); // fallback
-                }
+            final year = int.tryParse(dateParts[0]) ?? 0;
+            final month = int.tryParse(dateParts[1]) ?? 1;
+            final day = int.tryParse(dateParts[2]) ?? 1;
 
-                // Combine date and time into one DateTime object
-                final combinedDateTime = DateTime(
-                  year,
-                  month,
-                  day,
-                  parsedTime.hour,
-                  parsedTime.minute,
-                );
+            DateTime timeParsed;
+            try {
+              timeParsed =
+                  DateFormat.jm().parse(appointment['time'] ?? '12:00 AM');
+            } catch (_) {
+              timeParsed = DateTime(0);
+            }
 
-                return {'doc': doc, 'dateTime': combinedDateTime};
-              })
-              .whereType<Map<String, dynamic>>()
-              .toList();
+            final fullDateTime =
+                DateTime(year, month, day, timeParsed.hour, timeParsed.minute);
 
-          // Sort ascending by combined DateTime
-          docsWithDateTime
-              .sort((a, b) => a['dateTime'].compareTo(b['dateTime']));
+            final dayKey = DateFormat('EEEE, MMMM d, y').format(fullDateTime);
+
+            grouped[dayKey] = grouped[dayKey] ?? [];
+            grouped[dayKey]!.add({
+              'docId': doc.id,
+              'data': appointment,
+              'dateTime': fullDateTime,
+            });
+          }
+
+          // Sort groups by date
+          final sortedGroupKeys = grouped.keys.toList()
+            ..sort((a, b) {
+              final da = DateFormat('EEEE, MMMM d, y').parse(a);
+              final db = DateFormat('EEEE, MMMM d, y').parse(b);
+              return da.compareTo(db);
+            });
 
           return ListView.builder(
-            itemCount: docsWithDateTime.length,
-            itemBuilder: (context, index) {
-              final doc =
-                  docsWithDateTime[index]['doc'] as QueryDocumentSnapshot;
-              final appointment = doc.data() as Map<String, dynamic>;
-              final dateTime = docsWithDateTime[index]['dateTime'] as DateTime;
+            itemCount: sortedGroupKeys.length,
+            itemBuilder: (context, groupIndex) {
+              final day = sortedGroupKeys[groupIndex];
+              final bookings = grouped[day]!;
 
-              final formattedDate = DateFormat('yyyy-MM-dd').format(dateTime);
-              final formattedTime = DateFormat('hh:mm a').format(dateTime);
+              // Sort bookings within the group
+              bookings.sort((a, b) => a['dateTime'].compareTo(b['dateTime']));
 
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  leading:
-                      const Icon(Icons.pending_actions, color: Colors.orange),
-                  title: Text('${appointment['bank'] ?? 'No bank info'}'),
-                  subtitle: Text('Date: $formattedDate at $formattedTime'),
-                  trailing: Text(
-                    appointment['status'] ?? '',
-                    style: const TextStyle(
-                      color: Colors.orange,
-                      fontWeight: FontWeight.bold,
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    color: Colors.indigo.shade100,
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      day,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
+                  ...bookings.map((booking) {
+                    final appointment = booking['data'] as Map<String, dynamic>;
+                    final docId = booking['docId'];
+                    final dt = booking['dateTime'] as DateTime;
+                    final formattedTime = DateFormat('hh:mm a').format(dt);
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      child: ListTile(
+                        leading: const Icon(Icons.pending_actions,
+                            color: Colors.orange),
+                        title: Text('${appointment['bank']}'),
+                        subtitle:
+                            Text('${appointment['service']} — $formattedTime'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('Cancel Booking'),
+                                content: const Text(
+                                    'Are you sure you want to cancel this booking?'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
+                                    child: const Text('No'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
+                                    child: const Text('Yes'),
+                                  ),
+                                ],
+                              ),
+                            );
+
+                            if (confirm == true) {
+                              await FirebaseFirestore.instance
+                                  .collection('bookings')
+                                  .doc(docId)
+                                  .delete();
+                            }
+                          },
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ],
               );
             },
           );

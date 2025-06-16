@@ -3,8 +3,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
-class PreviousBookingsPage extends StatelessWidget {
+class PreviousBookingsPage extends StatefulWidget {
   const PreviousBookingsPage({super.key});
+
+  @override
+  State<PreviousBookingsPage> createState() => _PreviousBookingsPageState();
+}
+
+class _PreviousBookingsPageState extends State<PreviousBookingsPage> {
+  String selectedFilter = 'All';
+  String searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
@@ -20,13 +28,68 @@ class PreviousBookingsPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Previous Bookings'),
         backgroundColor: Colors.indigo,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(80),
+          child: Column(
+            children: [
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Search by bank or service...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      searchQuery = value.toLowerCase();
+                    });
+                  },
+                ),
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    FilterChip(
+                      label: const Text('All'),
+                      selected: selectedFilter == 'All',
+                      onSelected: (_) => setState(() => selectedFilter = 'All'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('Pending'),
+                      selected: selectedFilter == 'Pending',
+                      onSelected: (_) =>
+                          setState(() => selectedFilter = 'Pending'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('Completed'),
+                      selected: selectedFilter == 'Completed',
+                      onSelected: (_) =>
+                          setState(() => selectedFilter = 'Completed'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('Cancelled'),
+                      selected: selectedFilter == 'Cancelled',
+                      onSelected: (_) =>
+                          setState(() => selectedFilter = 'Cancelled'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('bookings') // ✅ fixed collection name
+            .collection('bookings')
             .where('userId', isEqualTo: currentUser.uid)
-            .where('status', whereIn: ['completed', 'cancelled'])
-            .orderBy('dateTime', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -39,36 +102,96 @@ class PreviousBookingsPage extends StatelessWidget {
 
           final docs = snapshot.data?.docs ?? [];
 
-          if (docs.isEmpty) {
-            return const Center(child: Text('No previous bookings found.'));
+          final bookings = docs
+              .map((doc) {
+                final booking = doc.data() as Map<String, dynamic>;
+                final status = (booking['status'] ?? 'pending').toLowerCase();
+
+                try {
+                  final dateParts = (booking['date'] ?? '').split('-');
+                  final year = int.tryParse(dateParts[0]) ?? 0;
+                  final month = int.tryParse(dateParts[1]) ?? 1;
+                  final day = int.tryParse(dateParts[2]) ?? 1;
+
+                  final timeStr = booking['time'] ?? '12:00 AM';
+                  final time = DateFormat.jm().parse(timeStr);
+
+                  final combined =
+                      DateTime(year, month, day, time.hour, time.minute);
+                  return {
+                    'data': booking,
+                    'dateTime': combined,
+                  };
+                } catch (_) {
+                  return null;
+                }
+              })
+              .whereType<Map<String, dynamic>>()
+              .toList();
+
+          bookings.sort((a, b) => b['dateTime'].compareTo(a['dateTime']));
+
+          final filtered = bookings.where((item) {
+            final data = item['data'] as Map<String, dynamic>;
+            final status = (data['status'] ?? '').toLowerCase();
+            final bank = (data['bank'] ?? '').toLowerCase();
+            final service = (data['service'] ?? '').toLowerCase();
+
+            final matchesFilter = selectedFilter == 'All' ||
+                selectedFilter.toLowerCase() == status;
+            final matchesSearch =
+                bank.contains(searchQuery) || service.contains(searchQuery);
+
+            return matchesFilter && matchesSearch;
+          }).toList();
+
+          if (filtered.isEmpty) {
+            return const Center(child: Text('No bookings found.'));
           }
 
           return ListView.builder(
-            itemCount: docs.length,
+            itemCount: filtered.length,
             itemBuilder: (context, index) {
-              final booking = docs[index].data() as Map<String, dynamic>;
+              final booking = filtered[index]['data'] as Map<String, dynamic>;
+              final dateTime = filtered[index]['dateTime'] as DateTime;
+              final status = (booking['status'] ?? 'pending').toLowerCase();
 
-              final status = booking['status'];
-              final dateTime = (booking['dateTime'] as Timestamp).toDate();
               final formattedDate = DateFormat('yyyy-MM-dd').format(dateTime);
               final formattedTime = DateFormat('hh:mm a').format(dateTime);
+
+              IconData icon;
+              Color color;
+
+              switch (status) {
+                case 'completed':
+                  icon = Icons.check_circle;
+                  color = Colors.green;
+                  break;
+                case 'cancelled':
+                  icon = Icons.cancel;
+                  color = Colors.red;
+                  break;
+                default:
+                  icon = Icons.pending_actions;
+                  color = Colors.orange;
+              }
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
-                  leading: Icon(
-                    status == 'completed' ? Icons.check_circle : Icons.cancel,
-                    color: status == 'completed' ? Colors.green : Colors.red,
-                  ),
+                  leading: Icon(icon, color: color),
                   title: Text('${booking['bank']}'),
-                  subtitle: Text('Date: $formattedDate at $formattedTime'),
+                  subtitle: Text(
+                    'Service: ${booking['service']}\nDate: $formattedDate at $formattedTime',
+                  ),
                   trailing: Text(
-                    status,
+                    status.toUpperCase(),
                     style: TextStyle(
-                      color: status == 'completed' ? Colors.green : Colors.red,
+                      color: color,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  isThreeLine: true,
                 ),
               );
             },
