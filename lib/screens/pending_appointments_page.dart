@@ -11,28 +11,6 @@ class PendingAppointmentsPage extends StatefulWidget {
 }
 
 class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  /// Group bookings by `date`
-  Map<String, List<QueryDocumentSnapshot>> _groupByDate(
-      List<QueryDocumentSnapshot> docs) {
-    Map<String, List<QueryDocumentSnapshot>> grouped = {};
-    for (var doc in docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      final date = data['date'] ?? 'Unknown';
-      grouped.putIfAbsent(date, () => []).add(doc);
-    }
-    return grouped;
-  }
-
-  Future<void> _cancelBooking(String bookingId) async {
-    await _firestore.collection('bookings').doc(bookingId).delete();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('✅ Booking cancelled')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -41,10 +19,10 @@ class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
         backgroundColor: Colors.indigo,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: _firestore
-            .collection('bookings')
+        stream: FirebaseFirestore.instance
+            .collection('bookings') // ✅ fixed collection name
             .where('status', isEqualTo: 'Pending')
-            .orderBy('createdAt', descending: false)
+            .orderBy('dateTime')
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -55,71 +33,39 @@ class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final docs = snapshot.data?.docs ?? [];
+          final data = snapshot.data;
 
-          if (docs.isEmpty) {
+          if (data == null || data.docs.isEmpty) {
             return const Center(child: Text('No pending appointments.'));
           }
 
-          final groupedDocs = _groupByDate(docs);
+          return ListView.builder(
+            itemCount: data.docs.length,
+            itemBuilder: (context, index) {
+              final doc = data.docs[index];
+              final appointment = doc.data() as Map<String, dynamic>;
 
-          return ListView(
-            children: groupedDocs.entries.map((entry) {
-              final date = entry.key;
-              final bookings = entry.value;
+              final dateTime = (appointment['dateTime'] as Timestamp).toDate();
+              final formattedDate = DateFormat('yyyy-MM-dd').format(dateTime);
+              final formattedTime = DateFormat('hh:mm a').format(dateTime);
 
-              final formattedDate =
-                  DateFormat('MMMM dd, yyyy').format(DateTime.parse(date));
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    color: Colors.indigo.shade100,
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    child: Text(
-                      formattedDate,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ListTile(
+                  leading:
+                      const Icon(Icons.pending_actions, color: Colors.orange),
+                  title: Text('${appointment['bank']}'),
+                  subtitle: Text('Date: $formattedDate at $formattedTime'),
+                  trailing: Text(
+                    appointment['status'] ?? '',
+                    style: const TextStyle(
+                      color: Colors.orange,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  ...bookings.map((doc) {
-                    final booking = doc.data() as Map<String, dynamic>;
-                    final time = booking['time'] ?? 'Unknown';
-                    final bank = booking['bank'] ?? 'Unknown';
-
-                    return Dismissible(
-                      key: ValueKey(doc.id),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        color: Colors.red,
-                        padding: const EdgeInsets.only(right: 20),
-                        alignment: Alignment.centerRight,
-                        child: const Icon(Icons.delete, color: Colors.white),
-                      ),
-                      onDismissed: (_) => _cancelBooking(doc.id),
-                      child: Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 4),
-                        child: ListTile(
-                          leading: const Icon(Icons.pending_actions,
-                              color: Colors.orange),
-                          title: Text(bank),
-                          subtitle: Text('Time: $time'),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.cancel, color: Colors.red),
-                            onPressed: () => _cancelBooking(doc.id),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ],
+                ),
               );
-            }).toList(),
+            },
           );
         },
       ),

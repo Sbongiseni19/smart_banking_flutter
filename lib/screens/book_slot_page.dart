@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class BookSlotPage extends StatefulWidget {
   const BookSlotPage({super.key});
@@ -68,15 +69,23 @@ class _BookSlotPageState extends State<BookSlotPage> {
         return;
       }
 
+      final user = FirebaseAuth.instance.currentUser;
+
       await FirebaseFirestore.instance.collection('bookings').add({
+        'userId': user?.uid ?? '',
         'userName': nameController.text.trim(),
         'email': emailController.text.trim(),
         'idNumber': idController.text.trim(),
         'bank': selectedBranch,
         'service': selectedService,
-        'date': selectedDate!.toIso8601String().split('T').first,
-        'time': selectedTime!.format(context),
         'status': 'Pending',
+        'dateTime': DateTime(
+          selectedDate!.year,
+          selectedDate!.month,
+          selectedDate!.day,
+          selectedTime!.hour,
+          selectedTime!.minute,
+        ),
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -161,9 +170,7 @@ class _BookSlotPageState extends State<BookSlotPage> {
                           : 'Date: ${selectedDate!.toLocal().toString().split(' ')[0]}'),
                     ),
                     ElevatedButton(
-                      onPressed: _pickDate,
-                      child: const Text('Pick Date'),
-                    ),
+                        onPressed: _pickDate, child: const Text('Pick Date')),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -175,9 +182,7 @@ class _BookSlotPageState extends State<BookSlotPage> {
                           : 'Time: ${selectedTime!.format(context)}'),
                     ),
                     ElevatedButton(
-                      onPressed: _pickTime,
-                      child: const Text('Pick Time'),
-                    ),
+                        onPressed: _pickTime, child: const Text('Pick Time')),
                   ],
                 ),
                 const SizedBox(height: 20),
