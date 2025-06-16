@@ -23,10 +23,11 @@ class PreviousBookingsPage extends StatelessWidget {
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('appointments')
-            .where('userId', isEqualTo: currentUser.uid)
-            .where('status', whereIn: ['completed', 'cancelled'])
-            .orderBy('dateTime', descending: true)
+            .collection('bookings')
+            .where('email', isEqualTo: currentUser.email)
+            .where('status',
+                whereIn: ['completed', 'cancelled', 'Completed', 'Cancelled'])
+            .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -49,23 +50,28 @@ class PreviousBookingsPage extends StatelessWidget {
               final booking = docs[index].data() as Map<String, dynamic>;
 
               final status = booking['status'];
-              final dateTime = DateTime.parse(booking['dateTime']);
-              final formattedDate = DateFormat('yyyy-MM-dd').format(dateTime);
-              final formattedTime = DateFormat('hh:mm a').format(dateTime);
+              final date = booking['date'];
+              final time = booking['time'];
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
                   leading: Icon(
-                    status == 'completed' ? Icons.check_circle : Icons.cancel,
-                    color: status == 'completed' ? Colors.green : Colors.red,
+                    status.toLowerCase() == 'completed'
+                        ? Icons.check_circle
+                        : Icons.cancel,
+                    color: status.toLowerCase() == 'completed'
+                        ? Colors.green
+                        : Colors.red,
                   ),
                   title: Text('${booking['bank']}'),
-                  subtitle: Text('Date: $formattedDate at $formattedTime'),
+                  subtitle: Text('Date: $date at $time'),
                   trailing: Text(
                     status,
                     style: TextStyle(
-                      color: status == 'completed' ? Colors.green : Colors.red,
+                      color: status.toLowerCase() == 'completed'
+                          ? Colors.green
+                          : Colors.red,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
