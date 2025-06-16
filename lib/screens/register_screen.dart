@@ -24,7 +24,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _otpController = TextEditingController();
 
   late RecaptchaVerifier webRecaptchaVerifier;
-  late ConfirmationResult confirmationResult;
+  ConfirmationResult? confirmationResult;
 
   bool _otpSent = false;
   bool _isLoading = false;
@@ -65,6 +65,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _sendOTP() async {
     if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isLoading = true);
 
     if (await _checkIfUserExists()) {
@@ -83,6 +84,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       setState(() => _otpSent = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("✅ OTP sent to $phone")),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('❌ OTP Error: $e')),
@@ -93,18 +97,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _verifyOTPAndRegister() async {
+    if (confirmationResult == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please send OTP first')),
+      );
+      return;
+    }
+
+    if (_otpController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter the OTP')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
       final code = _otpController.text.trim();
-      final credential = await confirmationResult.confirm(code);
+      final phoneCredential = await confirmationResult!.confirm(code);
 
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
 
+      // Create user with email and password
       final userCred = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
 
+// Link phone credential if available
+      final phoneAuthCredential = phoneCredential.credential;
+      if (phoneAuthCredential != null) {
+        await userCred.user?.linkWithCredential(phoneAuthCredential);
+      }
+
+      // Save user info in Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCred.user!.uid)
@@ -115,6 +141,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'phone': _phoneController.text.trim(),
         'uid': userCred.user!.uid,
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ Registration successful!')),
+      );
 
       Navigator.pushNamedAndRemoveUntil(
         context,
@@ -129,6 +159,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _idNumberController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _phoneController.dispose();
+    _otpController.dispose();
+    super.dispose();
   }
 
   @override
@@ -156,12 +198,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _emailController,
                   decoration: const InputDecoration(labelText: 'Email'),
                   validator: (val) => val!.isEmpty ? 'Enter email' : null,
+                  keyboardType: TextInputType.emailAddress,
                 ),
                 TextFormField(
                   controller: _passwordController,
                   decoration: const InputDecoration(labelText: 'Password'),
                   obscureText: true,
-                  validator: (val) => val!.length < 6 ? 'Min 6 chars' : null,
+                  validator: (val) =>
+                      val != null && val.length < 6 ? 'Min 6 chars' : null,
                 ),
                 TextFormField(
                   controller: _confirmPasswordController,
@@ -177,6 +221,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration:
                       const InputDecoration(labelText: 'Phone (+27...)'),
                   validator: (val) => val!.isEmpty ? 'Enter phone' : null,
+                  keyboardType: TextInputType.phone,
                 ),
                 if (_otpSent)
                   TextFormField(
