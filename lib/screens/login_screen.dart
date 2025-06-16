@@ -26,7 +26,6 @@ class _LoginScreenState extends State<LoginScreen> {
       final user = userCredential.user;
 
       if (user != null) {
-        // Always go to phone verification, no matter what
         Navigator.pushReplacementNamed(context, '/verifyPhone');
       }
     } on FirebaseAuthException catch (e) {
@@ -45,6 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
               controller: _emailController,
@@ -56,9 +56,19 @@ class _LoginScreenState extends State<LoginScreen> {
               decoration: const InputDecoration(labelText: 'Password'),
               obscureText: true,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/resetPassword');
+                },
+                child: const Text('Forgot Password?'),
+              ),
+            ),
+            const SizedBox(height: 10),
             _isLoading
-                ? const CircularProgressIndicator()
+                ? const Center(child: CircularProgressIndicator())
                 : ElevatedButton(
                     onPressed: _login,
                     child: const Text('Login'),

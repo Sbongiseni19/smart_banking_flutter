@@ -1,16 +1,15 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
-import 'package:smart_banking_app/screens/book_slot_page.dart';
-import 'package:smart_banking_app/screens/nearby_banks_page.dart';
-import 'package:smart_banking_app/screens/previous_bookings_page.dart';
-import 'package:smart_banking_app/screens/pending_appointments_page.dart';
-import 'package:smart_banking_app/screens/login_screen.dart';
+import 'book_slot_page.dart';
+import 'nearby_banks_page.dart';
+import 'previous_bookings_page.dart';
+import 'pending_appointments_page.dart';
+import 'login_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String userName;
@@ -53,11 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      setState(() {
-        _currentAddress = 'Location services disabled';
-        _hasError = true;
-        _isLoading = false;
-      });
+      _updateLocationState('Location services disabled', true);
       return;
     }
 
@@ -65,21 +60,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        setState(() {
-          _currentAddress = 'Location permission denied';
-          _hasError = true;
-          _isLoading = false;
-        });
+        _updateLocationState('Location permission denied', true);
         return;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      setState(() {
-        _currentAddress = 'Location permission permanently denied';
-        _hasError = true;
-        _isLoading = false;
-      });
+      _updateLocationState('Location permission permanently denied', true);
       return;
     }
 
@@ -99,6 +86,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  void _updateLocationState(String message, bool isError) {
+    setState(() {
+      _currentAddress = message;
+      _hasError = isError;
+      _isLoading = false;
+    });
+  }
+
   Future<void> _getAddressFromLatLng(Position position) async {
     try {
       List<Placemark> placemarks =
@@ -108,24 +103,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Placemark place = placemarks.first;
         String address =
             "${place.street}, ${place.locality}, ${place.administrativeArea}, ${place.country}";
-        setState(() {
-          _currentAddress = address;
-          _isLoading = false;
-          _hasError = false;
-        });
+        _updateLocationState(address, false);
       } else {
-        setState(() {
-          _currentAddress = "No address available";
-          _isLoading = false;
-          _hasError = true;
-        });
+        _updateLocationState("No address available", true);
       }
     } catch (e) {
-      setState(() {
-        _currentAddress = "Failed to get address";
-        _isLoading = false;
-        _hasError = true;
-      });
+      _updateLocationState("Failed to get address", true);
     }
   }
 
@@ -138,7 +121,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       _speech.listen(
         onResult: (result) {
-          String command = result.recognizedWords.toLowerCase();
+          String command = result.recognizedWords.trim().toLowerCase();
           _handleVoiceCommand(command);
         },
         listenMode: stt.ListenMode.confirmation,
@@ -224,7 +207,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Welcome, ${widget.userName}'),
+            Text('Welcome, ${widget.userName}',
+                style: const TextStyle(fontSize: 18)),
             const SizedBox(height: 2),
             Builder(
               builder: (_) {
@@ -255,18 +239,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         actions: [
-          Row(
-            children: [
-              Icon(
-                _isVoiceEnabled ? Icons.mic : Icons.mic_off,
-                color: _isVoiceEnabled ? Colors.greenAccent : Colors.grey,
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout),
-                tooltip: 'Logout',
-                onPressed: _showLogoutDialog,
-              ),
-            ],
+          Icon(
+            _isVoiceEnabled ? Icons.mic : Icons.mic_off,
+            color: _isVoiceEnabled ? Colors.greenAccent : Colors.grey,
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: _showLogoutDialog,
           ),
         ],
       ),
@@ -278,25 +258,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisSpacing: 15,
           children: [
             _buildDashboardTile(
-              context,
               icon: Icons.calendar_month,
               label: 'Book Slot',
               route: const BookSlotPage(),
             ),
             _buildDashboardTile(
-              context,
               icon: Icons.location_on,
               label: 'Nearby Banks',
               route: NearbyBanksPage(),
             ),
             _buildDashboardTile(
-              context,
               icon: Icons.history,
               label: 'Previous Bookings',
               route: const PreviousBookingsPage(),
             ),
             _buildDashboardTile(
-              context,
               icon: Icons.pending_actions,
               label: 'Pending Appointments',
               route: const PendingAppointmentsPage(),
@@ -307,8 +283,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildDashboardTile(BuildContext context,
-      {required IconData icon, required String label, required Widget route}) {
+  Widget _buildDashboardTile({
+    required IconData icon,
+    required String label,
+    required Widget route,
+  }) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
