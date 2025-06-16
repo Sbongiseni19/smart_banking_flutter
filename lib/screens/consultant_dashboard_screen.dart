@@ -9,14 +9,17 @@ class ConsultantDashboardScreen extends StatefulWidget {
       _ConsultantDashboardScreenState();
 }
 
-class _ConsultantDashboardScreenState extends State<ConsultantDashboardScreen> {
+class _ConsultantDashboardScreenState extends State<ConsultantDashboardScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchTerm = '';
+  late TabController _tabController;
 
-  final Stream<QuerySnapshot> _bookingsStream = FirebaseFirestore.instance
-      .collection('bookings')
-      .orderBy('createdAt', descending: true)
-      .snapshots();
+  @override
+  void initState() {
+    _tabController = TabController(length: 2, vsync: this);
+    super.initState();
+  }
 
   void _updateBookingStatus(String docId, String newStatus) {
     FirebaseFirestore.instance
@@ -25,12 +28,134 @@ class _ConsultantDashboardScreenState extends State<ConsultantDashboardScreen> {
         .update({'status': newStatus});
   }
 
+  void _deleteBooking(String docId) {
+    FirebaseFirestore.instance.collection('bookings').doc(docId).delete();
+  }
+
+  void _showDetailsDialog(Map<String, dynamic> data) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(data['userName'] ?? 'Booking Details'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Bank: ${data['bank']}'),
+            Text('Service: ${data['service']}'),
+            Text('Date: ${data['date']} at ${data['time']}'),
+            Text('Email: ${data['email']}'),
+            Text('ID: ${data['idNumber']}'),
+            Text('Status: ${data['status']}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            child: const Text('Close'),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBookingList(
+      List<QueryDocumentSnapshot> docs, bool isPendingTab) {
+    final filtered = docs.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final name = data['userName']?.toLowerCase() ?? '';
+      final bank = data['bank']?.toLowerCase() ?? '';
+      final service = data['service']?.toLowerCase() ?? '';
+      final status = data['status']?.toLowerCase() ?? '';
+      final matchSearch = name.contains(_searchTerm) ||
+          bank.contains(_searchTerm) ||
+          service.contains(_searchTerm);
+      final matchTab = isPendingTab ? status == 'pending' : true;
+      return matchSearch && matchTab;
+    }).toList();
+
+    if (filtered.isEmpty) {
+      return const Center(child: Text('No bookings found.'));
+    }
+
+    return ListView.builder(
+      itemCount: filtered.length,
+      itemBuilder: (context, index) {
+        final doc = filtered[index];
+        final data = doc.data() as Map<String, dynamic>;
+        final status = data['status'] ?? 'Pending';
+
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: ListTile(
+            leading: const Icon(Icons.account_circle, color: Colors.indigo),
+            title: Text(data['userName'] ?? 'Unknown'),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Bank: ${data['bank']}'),
+                Text('Service: ${data['service']}'),
+                Text('Date: ${data['date']} at ${data['time']}'),
+              ],
+            ),
+            trailing: isPendingTab
+                ? PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'View') {
+                        _showDetailsDialog(data);
+                      } else if (value == 'Complete') {
+                        _updateBookingStatus(doc.id, 'Completed');
+                      } else if (value == 'Reject') {
+                        _updateBookingStatus(doc.id, 'Cancelled');
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                          value: 'View', child: Text('View Details')),
+                      const PopupMenuItem(
+                          value: 'Complete', child: Text('Mark as Complete')),
+                      const PopupMenuItem(
+                          value: 'Reject', child: Text('Reject')),
+                    ],
+                  )
+                : PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'View') {
+                        _showDetailsDialog(data);
+                      } else if (value == 'Reject') {
+                        _updateBookingStatus(doc.id, 'Cancelled');
+                      } else if (value == 'Delete') {
+                        _deleteBooking(doc.id);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                          value: 'View', child: Text('View Details')),
+                      const PopupMenuItem(
+                          value: 'Reject', child: Text('Reject')),
+                      const PopupMenuItem(
+                          value: 'Delete', child: Text('Delete')),
+                    ],
+                  ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Consultant Dashboard'),
         backgroundColor: Colors.indigo,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Pending Bookings'),
+            Tab(text: 'Manage Bookings'),
+          ],
+        ),
       ),
       body: Column(
         children: [
@@ -48,14 +173,16 @@ class _ConsultantDashboardScreenState extends State<ConsultantDashboardScreen> {
                   },
                 ),
               ),
-              onChanged: (value) {
-                setState(() => _searchTerm = value.toLowerCase());
-              },
+              onChanged: (value) =>
+                  setState(() => _searchTerm = value.toLowerCase()),
             ),
           ),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: _bookingsStream,
+              stream: FirebaseFirestore.instance
+                  .collection('bookings')
+                  .orderBy('createdAt', descending: true)
+                  .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -64,62 +191,14 @@ class _ConsultantDashboardScreenState extends State<ConsultantDashboardScreen> {
                   return const Center(child: Text('No bookings found.'));
                 }
 
-                final bookings = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final userName = data['userName']?.toLowerCase() ?? '';
-                  final bank = data['bank']?.toLowerCase() ?? '';
-                  final service = data['service']?.toLowerCase() ?? '';
-                  return userName.contains(_searchTerm) ||
-                      bank.contains(_searchTerm) ||
-                      service.contains(_searchTerm);
-                }).toList();
+                final docs = snapshot.data!.docs;
 
-                if (bookings.isEmpty) {
-                  return const Center(
-                      child: Text('No results match your search.'));
-                }
-
-                return ListView.builder(
-                  itemCount: bookings.length,
-                  itemBuilder: (context, index) {
-                    final doc = bookings[index];
-                    final data = doc.data() as Map<String, dynamic>;
-
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: ListTile(
-                        leading: const Icon(Icons.account_circle,
-                            color: Colors.indigo),
-                        title: Text(data['userName'] ?? 'Unknown'),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Bank: ${data['bank']}'),
-                            Text('Service: ${data['service']}'),
-                            Text('Date: ${data['date']} at ${data['time']}'),
-                            Text('Email: ${data['email']}'),
-                            Text('ID: ${data['idNumber']}'),
-                          ],
-                        ),
-                        trailing: DropdownButton<String>(
-                          value: data['status'],
-                          onChanged: (String? newValue) {
-                            if (newValue != null) {
-                              _updateBookingStatus(doc.id, newValue);
-                            }
-                          },
-                          items: <String>['Pending', 'Completed', 'Cancelled']
-                              .map<DropdownMenuItem<String>>((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    );
-                  },
+                return TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildBookingList(docs, true), // Pending
+                    _buildBookingList(docs, false), // Manage All
+                  ],
                 );
               },
             ),
