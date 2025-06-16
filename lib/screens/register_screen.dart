@@ -1,4 +1,4 @@
-import 'dart:html'; // For web-only view
+import 'dart:html';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -14,13 +14,14 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _fullNameController = TextEditingController();
-  final _idNumberController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
+  final TextEditingController _fullNameController = TextEditingController();
+  final TextEditingController _idNumberController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _otpController = TextEditingController();
 
   late RecaptchaVerifier webRecaptchaVerifier;
   ConfirmationResult? confirmationResult;
@@ -32,45 +33,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void initState() {
     super.initState();
 
-    // Initialize reCAPTCHA only for web
     if (FirebaseAuth.instance is FirebaseAuthWeb) {
       webRecaptchaVerifier = RecaptchaVerifier(
         auth: FirebaseAuthPlatform.instance,
         container: 'recaptcha-container',
         size: RecaptchaVerifierSize.normal,
         theme: RecaptchaVerifierTheme.light,
-        onSuccess: () => print('✅ reCAPTCHA Completed'),
-        onError: (e) => print('❌ reCAPTCHA Error: $e'),
-        onExpired: () => print('⚠️ reCAPTCHA Expired'),
+        onSuccess: () => print('reCAPTCHA Completed!'),
+        onError: (error) => print('reCAPTCHA Error: $error'),
+        onExpired: () => print('reCAPTCHA Expired'),
       );
     }
   }
 
   Future<bool> _checkIfUserExists() async {
-    final email = _emailController.text.trim();
     final idNumber = _idNumberController.text.trim();
+    final email = _emailController.text.trim();
 
-    final emailExists = await FirebaseFirestore.instance
+    final snapshot = await FirebaseFirestore.instance
         .collection('users')
         .where('email', isEqualTo: email)
         .get();
 
-    final idExists = await FirebaseFirestore.instance
+    final idSnapshot = await FirebaseFirestore.instance
         .collection('users')
         .where('idNumber', isEqualTo: idNumber)
         .get();
 
-    return emailExists.docs.isNotEmpty || idExists.docs.isNotEmpty;
+    return snapshot.docs.isNotEmpty || idSnapshot.docs.isNotEmpty;
   }
 
   Future<void> _sendOTP() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
 
     if (await _checkIfUserExists()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("❌ Email or ID number already in use")),
+        const SnackBar(content: Text("❌ Email or ID number already in use.")),
       );
       setState(() => _isLoading = false);
       return;
@@ -78,53 +77,62 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       final phone = _phoneController.text.trim();
-
       confirmationResult = await FirebaseAuth.instance.signInWithPhoneNumber(
         phone,
         webRecaptchaVerifier,
       );
 
       setState(() => _otpSent = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('✅ OTP sent to $phone')),
-      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('❌ OTP Error: $e')),
       );
+      confirmationResult = null;
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
   Future<void> _verifyOTPAndRegister() async {
+    if (confirmationResult == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('❌ OTP has not been sent yet.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
-      final otp = _otpController.text.trim();
+      final code = _otpController.text.trim();
+      final credential = await confirmationResult!.confirm(code);
 
-      final userCredential = await confirmationResult!.confirm(otp);
-      final user = userCredential.user;
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
 
-      if (user != null) {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-          'fullName': _fullNameController.text.trim(),
-          'idNumber': _idNumberController.text.trim(),
-          'email': _emailController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'uid': user.uid,
-        });
+      final userCred = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
 
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/dashboard',
-          (route) => false,
-          arguments: {'userName': _fullNameController.text.trim()},
-        );
-      }
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCred.user!.uid)
+          .set({
+        'fullName': _fullNameController.text.trim(),
+        'idNumber': _idNumberController.text.trim(),
+        'email': email,
+        'phone': _phoneController.text.trim(),
+        'uid': userCred.user!.uid,
+      });
+
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/dashboard',
+        (route) => false,
+        arguments: {'userName': _fullNameController.text.trim()},
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Verification failed: $e')),
+        SnackBar(content: Text('❌ Registration failed: $e')),
       );
     } finally {
       setState(() => _isLoading = false);
@@ -135,76 +143,78 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Register')),
-      body: SingleChildScrollView(
+      body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _fullNameController,
-                decoration: const InputDecoration(labelText: 'Full Name'),
-                validator: (val) =>
-                    val!.isEmpty ? 'Enter your full name' : null,
-              ),
-              TextFormField(
-                controller: _idNumberController,
-                decoration: const InputDecoration(labelText: 'ID Number'),
-                validator: (val) => val!.isEmpty ? 'Enter your ID' : null,
-              ),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: (val) => val!.isEmpty ? 'Enter email' : null,
-              ),
-              TextFormField(
-                controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Password'),
-                obscureText: true,
-                validator: (val) =>
-                    val!.length < 6 ? 'Password must be 6+ characters' : null,
-              ),
-              TextFormField(
-                controller: _confirmPasswordController,
-                decoration:
-                    const InputDecoration(labelText: 'Confirm Password'),
-                obscureText: true,
-                validator: (val) => val != _passwordController.text
-                    ? 'Passwords do not match'
-                    : null,
-              ),
-              TextFormField(
-                controller: _phoneController,
-                decoration: const InputDecoration(labelText: 'Phone (+27...)'),
-                validator: (val) => val!.isEmpty ? 'Enter phone number' : null,
-              ),
-              if (_otpSent)
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
                 TextFormField(
-                  controller: _otpController,
-                  decoration: const InputDecoration(labelText: 'Enter OTP'),
-                  keyboardType: TextInputType.number,
+                  controller: _fullNameController,
+                  decoration: const InputDecoration(labelText: 'Full Name'),
+                  validator: (val) => val!.isEmpty ? 'Enter your name' : null,
                 ),
-              const SizedBox(height: 20),
-              if (_isLoading)
-                const CircularProgressIndicator()
-              else if (!_otpSent)
-                ElevatedButton(
-                  onPressed: _sendOTP,
-                  child: const Text('Send OTP'),
-                )
-              else
-                ElevatedButton(
-                  onPressed: _verifyOTPAndRegister,
-                  child: const Text('Verify OTP & Register'),
+                TextFormField(
+                  controller: _idNumberController,
+                  decoration: const InputDecoration(labelText: 'ID Number'),
+                  validator: (val) => val!.isEmpty ? 'Enter ID number' : null,
                 ),
-              const SizedBox(height: 20),
-              const Text('reCAPTCHA must appear below (web only):'),
-              const SizedBox(height: 10),
-              const SizedBox(
-                height: 100,
-                child: HtmlElementView(viewType: 'recaptcha-container'),
-              ),
-            ],
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                  validator: (val) => val!.isEmpty ? 'Enter email' : null,
+                ),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: const InputDecoration(labelText: 'Password'),
+                  obscureText: true,
+                  validator: (val) => val!.length < 6 ? 'Min 6 chars' : null,
+                ),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  decoration:
+                      const InputDecoration(labelText: 'Confirm Password'),
+                  obscureText: true,
+                  validator: (val) => val != _passwordController.text
+                      ? 'Passwords do not match'
+                      : null,
+                ),
+                TextFormField(
+                  controller: _phoneController,
+                  decoration:
+                      const InputDecoration(labelText: 'Phone (+27...)'),
+                  validator: (val) => val!.isEmpty ? 'Enter phone' : null,
+                ),
+                if (_otpSent)
+                  TextFormField(
+                    controller: _otpController,
+                    decoration: const InputDecoration(labelText: 'Enter OTP'),
+                    keyboardType: TextInputType.number,
+                  ),
+                const SizedBox(height: 20),
+                if (_isLoading)
+                  const CircularProgressIndicator()
+                else if (!_otpSent)
+                  ElevatedButton(
+                    onPressed: _sendOTP,
+                    child: const Text('Send OTP'),
+                  )
+                else
+                  ElevatedButton(
+                    onPressed: _verifyOTPAndRegister,
+                    child: const Text('Verify OTP & Register'),
+                  ),
+                const SizedBox(height: 20),
+                const Text('Google reCAPTCHA must show below (web only):'),
+                const SizedBox(height: 10),
+                const SizedBox(
+                  height: 100,
+                  width: double.infinity,
+                  child: HtmlElementView(viewType: 'recaptcha-container'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
