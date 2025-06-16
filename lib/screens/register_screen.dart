@@ -23,8 +23,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
 
-  late RecaptchaVerifier webRecaptchaVerifier;
-  ConfirmationResult? confirmationResult;
+  RecaptchaVerifier? _recaptchaVerifier; // Made nullable
+  ConfirmationResult? _confirmationResult;
 
   bool _otpSent = false;
   bool _isLoading = false;
@@ -32,17 +32,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeRecaptcha();
+  }
 
+  void _initializeRecaptcha() {
     if (FirebaseAuth.instance is FirebaseAuthWeb) {
-      webRecaptchaVerifier = RecaptchaVerifier(
-        auth: FirebaseAuthPlatform.instance,
-        container: 'recaptcha-container',
-        size: RecaptchaVerifierSize.normal,
-        theme: RecaptchaVerifierTheme.light,
-        onSuccess: () => print('reCAPTCHA Completed!'),
-        onError: (error) => print('reCAPTCHA Error: $error'),
-        onExpired: () => print('reCAPTCHA Expired'),
-      );
+      try {
+        _recaptchaVerifier = RecaptchaVerifier(
+          auth: FirebaseAuth.instance as FirebaseAuthWeb,
+          container: 'recaptcha-container',
+          size: RecaptchaVerifierSize.normal,
+          theme: RecaptchaVerifierTheme.light,
+          onSuccess: () => debugPrint('reCAPTCHA Completed!'),
+          onError: (error) => debugPrint('reCAPTCHA Error: $error'),
+          onExpired: () => debugPrint('reCAPTCHA Expired'),
+        );
+      } catch (e) {
+        debugPrint('Failed to initialize reCAPTCHA: $e');
+      }
     }
   }
 
@@ -77,9 +84,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       final phone = _phoneController.text.trim();
-      confirmationResult = await FirebaseAuth.instance.signInWithPhoneNumber(
+
+      if (_recaptchaVerifier == null) {
+        _initializeRecaptcha();
+        if (_recaptchaVerifier == null) {
+          throw Exception('reCAPTCHA verification not available');
+        }
+      }
+
+      _confirmationResult = await FirebaseAuth.instance.signInWithPhoneNumber(
         phone,
-        webRecaptchaVerifier,
+        _recaptchaVerifier!,
       );
 
       setState(() => _otpSent = true);
@@ -87,14 +102,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('❌ OTP Error: $e')),
       );
-      confirmationResult = null;
+      _confirmationResult = null;
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
   Future<void> _verifyOTPAndRegister() async {
-    if (confirmationResult == null) {
+    if (_confirmationResult == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('❌ OTP has not been sent yet.')),
       );
@@ -105,7 +120,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       final code = _otpController.text.trim();
-      final credential = await confirmationResult!.confirm(code);
+      await _confirmationResult!.confirm(code);
 
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
