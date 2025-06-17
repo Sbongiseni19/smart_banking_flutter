@@ -143,7 +143,8 @@ class _ConsultantDashboardScreenState extends State<ConsultantDashboardScreen>
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: ListTile(
-                leading: const Icon(Icons.account_circle, color: Colors.indigo),
+                leading: const Icon(Icons.account_circle,
+                    color: Color.fromARGB(255, 48, 48, 51)),
                 title: Text(data['userName'] ?? 'Unknown'),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -198,8 +199,8 @@ class _ConsultantDashboardScreenState extends State<ConsultantDashboardScreen>
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                icon:
-                                    const Icon(Icons.delete, color: Colors.red),
+                                icon: const Icon(Icons.delete,
+                                    color: Color.fromARGB(255, 38, 99, 184)),
                                 onPressed: () async {
                                   final confirm = await showDialog<bool>(
                                     context: context,
@@ -268,7 +269,7 @@ class _ConsultantDashboardScreenState extends State<ConsultantDashboardScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Consultant Dashboard'),
-        backgroundColor: Colors.indigo,
+        backgroundColor: const Color.fromARGB(255, 245, 245, 247),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
