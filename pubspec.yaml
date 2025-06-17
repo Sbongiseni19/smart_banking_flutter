@@ -23,6 +23,8 @@ dependencies:
   firebase_auth_web: ^5.5.4
   flutter_local_notifications: ^17.1.0
   background_fetch: ^1.2.1
+  pdf: ^3.10.7
+  printing: ^5.12.1
 
 
 
