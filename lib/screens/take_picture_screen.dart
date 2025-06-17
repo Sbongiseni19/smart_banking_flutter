@@ -1,11 +1,5 @@
-import 'dart:io' show File; // For mobile platforms only
-import 'dart:typed_data';
-import 'package:camera/camera.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:path/path.dart' as path;
+import 'package:camera/camera.dart';
 import 'consultant_screen.dart';
 
 class TakePictureScreen extends StatefulWidget {
@@ -19,7 +13,6 @@ class TakePictureScreen extends StatefulWidget {
 class _TakePictureScreenState extends State<TakePictureScreen> {
   late CameraController _controller;
   late Future<void> _initializeControllerFuture;
-  bool isProcessing = false;
 
   @override
   void initState() {
@@ -35,43 +28,12 @@ class _TakePictureScreenState extends State<TakePictureScreen> {
   }
 
   Future<void> _takePicture() async {
-    setState(() => isProcessing = true);
-
     try {
       await _initializeControllerFuture;
+      final image = await _controller.takePicture();
 
-      final XFile imageFile = await _controller.takePicture();
+      // You can save the image or upload it to Firebase here
 
-      String imageUrl;
-
-      if (kIsWeb) {
-        // For Web: read bytes and upload using putData()
-        final Uint8List bytes = await imageFile.readAsBytes();
-        final fileName = path.basename(imageFile.name);
-        final storageRef = FirebaseStorage.instance.ref().child(
-            "staff_logins/${DateTime.now().millisecondsSinceEpoch}_$fileName");
-
-        await storageRef.putData(bytes);
-        imageUrl = await storageRef.getDownloadURL();
-      } else {
-        // For Mobile: use File and putFile()
-        final File image = File(imageFile.path);
-        final fileName = path.basename(image.path);
-        final storageRef = FirebaseStorage.instance.ref().child(
-            "staff_logins/${DateTime.now().millisecondsSinceEpoch}_$fileName");
-
-        await storageRef.putFile(image);
-        imageUrl = await storageRef.getDownloadURL();
-      }
-
-      // Save to Firestore
-      await FirebaseFirestore.instance.collection('staff_logins').add({
-        'image_url': imageUrl,
-        'timestamp': Timestamp.now(),
-        'email': 'staff@bank.com', // Replace with actual email if dynamic
-      });
-
-      // Navigate to dashboard
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -79,26 +41,8 @@ class _TakePictureScreenState extends State<TakePictureScreen> {
         ),
       );
     } catch (e) {
-      _showError("Error: $e");
-    } finally {
-      setState(() => isProcessing = false);
+      print('Error capturing photo: $e');
     }
-  }
-
-  void _showError(String msg) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Error"),
-        content: Text(msg),
-        actions: [
-          TextButton(
-            child: const Text("OK"),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -113,10 +57,8 @@ class _TakePictureScreenState extends State<TakePictureScreen> {
               children: [
                 Expanded(child: CameraPreview(_controller)),
                 ElevatedButton(
-                  onPressed: isProcessing ? null : _takePicture,
-                  child: isProcessing
-                      ? const CircularProgressIndicator()
-                      : const Text('Capture & Upload'),
+                  onPressed: _takePicture,
+                  child: const Text('Capture & Continue'),
                 ),
               ],
             );
