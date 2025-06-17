@@ -105,10 +105,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "${place.street}, ${place.locality}, ${place.administrativeArea}, ${place.country}";
         _updateLocationState(address, false);
       } else {
-        _updateLocationState("No address available", true);
+        _updateLocationState(" ", true);
       }
     } catch (e) {
-      _updateLocationState("Failed to get address", true);
+      _updateLocationState(" ", true);
     }
   }
 

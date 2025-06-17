@@ -1,10 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'consultant_screen.dart';
 
 class TakePictureScreen extends StatefulWidget {
@@ -37,36 +32,16 @@ class _TakePictureScreenState extends State<TakePictureScreen> {
       await _initializeControllerFuture;
       final image = await _controller.takePicture();
 
-      final File imageFile = File(image.path);
+      // You can save the image or upload it to Firebase here
 
-      // Upload to Firebase Storage
-      final fileName = path.basename(image.path);
-      final destination = 'staff_logins/$fileName';
-
-      final ref = FirebaseStorage.instance.ref(destination);
-      await ref.putFile(imageFile);
-      final imageUrl = await ref.getDownloadURL();
-
-      // Save info to Firestore
-      await FirebaseFirestore.instance.collection('staffLogins').add({
-        'imageUrl': imageUrl,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-
-      // Go to Dashboard
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const ConsultantDashboardScreen(),
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error capturing or uploading photo: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to capture/upload photo')),
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const ConsultantDashboardScreen(),
+        ),
       );
+    } catch (e) {
+      print('Error capturing photo: $e');
     }
   }
 

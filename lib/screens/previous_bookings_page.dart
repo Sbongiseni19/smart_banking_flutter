@@ -90,10 +90,15 @@ class _PreviousBookingsPageState extends State<PreviousBookingsPage> {
         stream: FirebaseFirestore.instance
             .collection('bookings')
             .where('userId', isEqualTo: currentUser.uid)
+            //.snapshots(),
+            // Uncomment below line and comment above line to test without filtering by userId
+            //.snapshots(),
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return const Center(child: Text('Error loading bookings.'));
+            return Center(
+              child: Text('Error loading bookings: ${snapshot.error}'),
+            );
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -101,6 +106,11 @@ class _PreviousBookingsPageState extends State<PreviousBookingsPage> {
           }
 
           final docs = snapshot.data?.docs ?? [];
+          // Debug prints - check your console/logcat for output
+          print('Fetched ${docs.length} bookings');
+          for (var doc in docs) {
+            print('Booking document data: ${doc.data()}');
+          }
 
           final bookings = docs
               .map((doc) {
@@ -122,7 +132,8 @@ class _PreviousBookingsPageState extends State<PreviousBookingsPage> {
                     'data': booking,
                     'dateTime': combined,
                   };
-                } catch (_) {
+                } catch (e) {
+                  print('Date parsing error: $e');
                   return null;
                 }
               })
