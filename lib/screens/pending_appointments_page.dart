@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class PendingAppointmentsPage extends StatefulWidget {
   const PendingAppointmentsPage({super.key});
@@ -11,17 +12,27 @@ class PendingAppointmentsPage extends StatefulWidget {
 }
 
 class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
+  final user = FirebaseAuth.instance.currentUser;
+
   @override
   Widget build(BuildContext context) {
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: Text('Please log in to view appointments.')),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pending Appointments'),
+        title: const Text('My Pending Appointments'),
         backgroundColor: Colors.indigo,
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('bookings')
             .where('status', isEqualTo: 'Pending')
+            .where('userId', isEqualTo: user!.uid) // ✅ Filter by user
+            .orderBy('dateTime') // ✅ Sort by dateTime
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -35,45 +46,29 @@ class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
           final data = snapshot.data;
 
           if (data == null || data.docs.isEmpty) {
-            return const Center(child: Text('No pending appointments.'));
+            return const Center(
+                child: Text('You have no pending appointments.'));
           }
 
-          // Parse & group by day
+          // Group appointments by day
           final Map<String, List<Map<String, dynamic>>> grouped = {};
 
           for (var doc in data.docs) {
             final appointment = doc.data() as Map<String, dynamic>;
+            final dateTime = (appointment['dateTime'] as Timestamp?)?.toDate();
 
-            // Parse date & time
-            final dateParts = (appointment['date'] ?? '').split('-');
-            if (dateParts.length != 3) continue;
+            if (dateTime == null) continue;
 
-            final year = int.tryParse(dateParts[0]) ?? 0;
-            final month = int.tryParse(dateParts[1]) ?? 1;
-            final day = int.tryParse(dateParts[2]) ?? 1;
-
-            DateTime timeParsed;
-            try {
-              timeParsed =
-                  DateFormat.jm().parse(appointment['time'] ?? '12:00 AM');
-            } catch (_) {
-              timeParsed = DateTime(0);
-            }
-
-            final fullDateTime =
-                DateTime(year, month, day, timeParsed.hour, timeParsed.minute);
-
-            final dayKey = DateFormat('EEEE, MMMM d, y').format(fullDateTime);
+            final dayKey = DateFormat('EEEE, MMMM d, y').format(dateTime);
 
             grouped[dayKey] = grouped[dayKey] ?? [];
             grouped[dayKey]!.add({
               'docId': doc.id,
               'data': appointment,
-              'dateTime': fullDateTime,
+              'dateTime': dateTime,
             });
           }
 
-          // Sort groups by date
           final sortedGroupKeys = grouped.keys.toList()
             ..sort((a, b) {
               final da = DateFormat('EEEE, MMMM d, y').parse(a);
@@ -87,7 +82,6 @@ class _PendingAppointmentsPageState extends State<PendingAppointmentsPage> {
               final day = sortedGroupKeys[groupIndex];
               final bookings = grouped[day]!;
 
-              // Sort bookings within the group
               bookings.sort((a, b) => a['dateTime'].compareTo(b['dateTime']));
 
               return Column(

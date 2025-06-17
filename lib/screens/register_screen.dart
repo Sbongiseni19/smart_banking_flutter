@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'otp_register_screen.dart'; // <-- ✅ new OTP screen file
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -38,7 +38,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return emailSnapshot.docs.isNotEmpty || idSnapshot.docs.isNotEmpty;
   }
 
-  Future<void> _registerUser() async {
+  Future<void> _validateAndProceedToOTP() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -51,49 +51,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    try {
-      final email = _emailController.text.trim();
-      final password = _passwordController.text.trim();
-
-      final userCred = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCred.user!.uid)
-          .set({
-        'fullName': _fullNameController.text.trim(),
-        'idNumber': _idNumberController.text.trim(),
-        'email': email,
-        'phone': _phoneController.text.trim(),
-        'uid': userCred.user!.uid,
-      });
-
-      // ✅ Show popup dialog
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text("Success"),
-          content: const Text("✅ You have registered successfully!"),
-          actions: [
-            TextButton(
-              child: const Text("OK"),
-              onPressed: () {
-                Navigator.pop(context); // Close dialog
-                Navigator.pushReplacementNamed(
-                    context, '/login'); // Go to login
-              },
-            ),
-          ],
+    // ✅ Go to OTP screen with all user details
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OTPRegisterScreen(
+          fullName: _fullNameController.text.trim(),
+          idNumber: _idNumberController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+          phone: _phoneController.text.trim(),
         ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Registration failed: $e')),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
+      ),
+    );
+
+    setState(() => _isLoading = false);
   }
 
   @override
@@ -149,8 +121,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 _isLoading
                     ? const CircularProgressIndicator()
                     : ElevatedButton(
-                        onPressed: _registerUser,
-                        child: const Text('Register'),
+                        onPressed: _validateAndProceedToOTP,
+                        child: const Text('Register & Verify OTP'),
                       ),
               ],
             ),

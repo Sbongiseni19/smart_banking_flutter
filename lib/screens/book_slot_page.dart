@@ -61,6 +61,15 @@ class _BookSlotPageState extends State<BookSlotPage> {
   }
 
   Future<void> _submitBooking() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in before booking.')),
+      );
+      return;
+    }
+
     if (_formKey.currentState!.validate()) {
       if (selectedDate == null || selectedTime == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -69,10 +78,8 @@ class _BookSlotPageState extends State<BookSlotPage> {
         return;
       }
 
-      final user = FirebaseAuth.instance.currentUser;
-
       await FirebaseFirestore.instance.collection('bookings').add({
-        'userId': user?.uid ?? '',
+        'userId': user.uid, // ✅ UID stored here
         'userName': nameController.text.trim(),
         'email': emailController.text.trim(),
         'idNumber': idController.text.trim(),
@@ -112,6 +119,17 @@ class _BookSlotPageState extends State<BookSlotPage> {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Book Appointment')),
+        body: const Center(
+          child: Text('Please log in to book an appointment.'),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
           title: const Text('Book Appointment'),
