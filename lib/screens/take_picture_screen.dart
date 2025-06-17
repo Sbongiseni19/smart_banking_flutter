@@ -1,5 +1,7 @@
-import 'dart:io';
+import 'dart:io' show File; // For mobile platforms only
+import 'dart:typed_data';
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -39,21 +41,34 @@ class _TakePictureScreenState extends State<TakePictureScreen> {
       await _initializeControllerFuture;
 
       final XFile imageFile = await _controller.takePicture();
-      final File image = File(imageFile.path);
 
-      // Upload to Firebase Storage
-      final fileName = path.basename(image.path);
-      final storageRef = FirebaseStorage.instance.ref().child(
-          "staff_logins/${DateTime.now().millisecondsSinceEpoch}_$fileName");
+      String imageUrl;
 
-      await storageRef.putFile(image);
-      final imageUrl = await storageRef.getDownloadURL();
+      if (kIsWeb) {
+        // For Web: read bytes and upload using putData()
+        final Uint8List bytes = await imageFile.readAsBytes();
+        final fileName = path.basename(imageFile.name);
+        final storageRef = FirebaseStorage.instance.ref().child(
+            "staff_logins/${DateTime.now().millisecondsSinceEpoch}_$fileName");
+
+        await storageRef.putData(bytes);
+        imageUrl = await storageRef.getDownloadURL();
+      } else {
+        // For Mobile: use File and putFile()
+        final File image = File(imageFile.path);
+        final fileName = path.basename(image.path);
+        final storageRef = FirebaseStorage.instance.ref().child(
+            "staff_logins/${DateTime.now().millisecondsSinceEpoch}_$fileName");
+
+        await storageRef.putFile(image);
+        imageUrl = await storageRef.getDownloadURL();
+      }
 
       // Save to Firestore
       await FirebaseFirestore.instance.collection('staff_logins').add({
         'image_url': imageUrl,
         'timestamp': Timestamp.now(),
-        'email': 'staff@bank.com', // replace with actual email if dynamic
+        'email': 'staff@bank.com', // Replace with actual email if dynamic
       });
 
       // Navigate to dashboard
