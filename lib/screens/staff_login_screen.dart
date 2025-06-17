@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'consultant_screen.dart';
+import 'package:camera/camera.dart';
+import 'take_picture_screen.dart';
 
 class StaffLoginScreen extends StatefulWidget {
   const StaffLoginScreen({super.key});
@@ -13,16 +14,28 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   final _passwordController = TextEditingController();
   String errorText = '';
 
-  void _login() {
+  void _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     if (email == 'staff@bank.com' && password == '1234') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) => const ConsultantDashboardScreen()),
-      );
+      try {
+        final cameras = await availableCameras();
+        final frontCamera = cameras.firstWhere(
+          (camera) => camera.lensDirection == CameraLensDirection.front,
+        );
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TakePictureScreen(camera: frontCamera),
+          ),
+        );
+      } catch (e) {
+        setState(() {
+          errorText = 'Camera error: $e';
+        });
+      }
     } else {
       setState(() {
         errorText = 'Invalid credentials';
