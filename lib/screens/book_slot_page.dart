@@ -79,7 +79,7 @@ class _BookSlotPageState extends State<BookSlotPage> {
       }
 
       await FirebaseFirestore.instance.collection('bookings').add({
-        'userId': user.uid, // ✅ UID stored here
+        'userId': user.uid,
         'userName': nameController.text.trim(),
         'email': emailController.text.trim(),
         'idNumber': idController.text.trim(),
@@ -206,8 +206,9 @@ class _BookSlotPageState extends State<BookSlotPage> {
                 const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _submitBooking,
-                  style:
-                      ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color.fromARGB(255, 73, 75, 84),
+                  ),
                   child: const Text('Submit Booking'),
                 ),
               ],

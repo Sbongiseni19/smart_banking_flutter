@@ -90,9 +90,6 @@ class _PreviousBookingsPageState extends State<PreviousBookingsPage> {
         stream: FirebaseFirestore.instance
             .collection('bookings')
             .where('userId', isEqualTo: currentUser.uid)
-            //.snapshots(),
-            // Uncomment below line and comment above line to test without filtering by userId
-            //.snapshots(),
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -106,36 +103,17 @@ class _PreviousBookingsPageState extends State<PreviousBookingsPage> {
           }
 
           final docs = snapshot.data?.docs ?? [];
-          // Debug prints - check your console/logcat for output
-          print('Fetched ${docs.length} bookings');
-          for (var doc in docs) {
-            print('Booking document data: ${doc.data()}');
-          }
 
           final bookings = docs
               .map((doc) {
-                final booking = doc.data() as Map<String, dynamic>;
-                final status = (booking['status'] ?? 'pending').toLowerCase();
+                final data = doc.data() as Map<String, dynamic>;
+                final dateTime = (data['dateTime'] as Timestamp?)?.toDate();
+                if (dateTime == null) return null;
 
-                try {
-                  final dateParts = (booking['date'] ?? '').split('-');
-                  final year = int.tryParse(dateParts[0]) ?? 0;
-                  final month = int.tryParse(dateParts[1]) ?? 1;
-                  final day = int.tryParse(dateParts[2]) ?? 1;
-
-                  final timeStr = booking['time'] ?? '12:00 AM';
-                  final time = DateFormat.jm().parse(timeStr);
-
-                  final combined =
-                      DateTime(year, month, day, time.hour, time.minute);
-                  return {
-                    'data': booking,
-                    'dateTime': combined,
-                  };
-                } catch (e) {
-                  print('Date parsing error: $e');
-                  return null;
-                }
+                return {
+                  'data': data,
+                  'dateTime': dateTime,
+                };
               })
               .whereType<Map<String, dynamic>>()
               .toList();
@@ -148,7 +126,7 @@ class _PreviousBookingsPageState extends State<PreviousBookingsPage> {
             final bank = (data['bank'] ?? '').toLowerCase();
             final service = (data['service'] ?? '').toLowerCase();
 
-            final matchesFilter = selectedFilter == 'All' ||
+            final matchesFilter = selectedFilter.toLowerCase() == 'all' ||
                 selectedFilter.toLowerCase() == status;
             final matchesSearch =
                 bank.contains(searchQuery) || service.contains(searchQuery);

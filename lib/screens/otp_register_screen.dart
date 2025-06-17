@@ -60,7 +60,7 @@ class _OTPRegisterScreenState extends State<OTPRegisterScreen> {
     await FirebaseAuth.instance.verifyPhoneNumber(
       phoneNumber: widget.phone,
       verificationCompleted: (PhoneAuthCredential credential) async {
-        // Optional: Automatically sign in
+        // Optionally use this for automatic sign-in
       },
       verificationFailed: (FirebaseAuthException e) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -88,28 +88,36 @@ class _OTPRegisterScreenState extends State<OTPRegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final credential = PhoneAuthProvider.credential(
+      // Step 1: Sign in with phone credential
+      final phoneCredential = PhoneAuthProvider.credential(
         verificationId: _verificationId!,
         smsCode: code,
       );
 
-      final userCred = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-              email: widget.email, password: widget.password);
+      final phoneUser =
+          await FirebaseAuth.instance.signInWithCredential(phoneCredential);
 
-      await userCred.user!.linkWithCredential(credential);
+      // Step 2: Link email/password to same user
+      final emailCredential = EmailAuthProvider.credential(
+        email: widget.email,
+        password: widget.password,
+      );
 
+      await phoneUser.user!.linkWithCredential(emailCredential);
+
+      // Step 3: Save user data to Firestore
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(userCred.user!.uid)
+          .doc(phoneUser.user!.uid)
           .set({
         'fullName': widget.fullName,
         'idNumber': widget.idNumber,
         'email': widget.email,
         'phone': widget.phone,
-        'uid': userCred.user!.uid,
+        'uid': phoneUser.user!.uid,
       });
 
+      // Step 4: Show success dialog
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
