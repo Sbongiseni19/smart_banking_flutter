@@ -1,0 +1,39 @@
+{
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "smartbankingapp-b25a0",
+          "appId": "1:60243541943:android:f389fac68a0163eeae3232",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "smartbankingapp-b25a0",
+          "configurations": {
+            "android": "1:60243541943:android:f389fac68a0163eeae3232",
+            "ios": "1:60243541943:ios:32cc06b9f0977cbbae3232",
+            "macos": "1:60243541943:ios:32cc06b9f0977cbbae3232",
+            "web": "1:60243541943:web:2d0022da90c8ba12ae3232",
+            "windows": "1:60243541943:web:fac5a0fa43012718ae3232"
+          }
+        }
+      }
+    }
+  }
+}
