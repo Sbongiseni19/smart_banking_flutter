@@ -121,6 +121,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return null;
   }
 
+  String? _validatePassword(String? val) {
+    if (val == null || val.isEmpty) {
+      return 'Password is required';
+    }
+    if (val.length < 8) {
+      return 'Password must be at least 8 characters long';
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(val)) {
+      return 'Password must contain at least one uppercase letter';
+    }
+    if (!RegExp(r'[0-9]').hasMatch(val)) {
+      return 'Password must contain at least one digit';
+    }
+    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(val)) {
+      return 'Password must contain at least one special character';
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -199,8 +218,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _passwordController,
                   decoration: const InputDecoration(labelText: 'Password'),
                   obscureText: true,
-                  validator: (val) =>
-                      val!.length < 6 ? 'Min 6 characters' : null,
+                  validator: _validatePassword,
                 ),
                 TextFormField(
                   controller: _confirmPasswordController,
