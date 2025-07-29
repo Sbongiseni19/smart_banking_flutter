@@ -11,17 +11,15 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _surnameController = TextEditingController();
-  final TextEditingController _idNumberController = TextEditingController();
-  final TextEditingController _passportNumberController =
-      TextEditingController();
-  final TextEditingController _nationalityController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController =
-      TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _surnameController = TextEditingController();
+  final _idNumberController = TextEditingController();
+  final _passportNumberController = TextEditingController();
+  final _nationalityController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _phoneController = TextEditingController();
 
   bool _isLoading = false;
   String? _citizenship; // 'yes' or 'no'
@@ -48,33 +46,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
 
-    if (await _checkIfUserExists()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("❌ Email or ID number already in use.")),
-      );
-      setState(() => _isLoading = false);
-      return;
-    }
+    try {
+      final userExists = await _checkIfUserExists();
+      if (userExists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("❌ Email or ID number already in use.")),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
 
-    final fullName =
-        '${_nameController.text.trim()} ${_surnameController.text.trim()}';
+      final fullName =
+          '${_nameController.text.trim()} ${_surnameController.text.trim()}';
+      final idOrPassport = _citizenship == 'yes'
+          ? _idNumberController.text.trim()
+          : 'Passport-${_passportNumberController.text.trim()}';
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => OTPRegisterScreen(
-          fullName: fullName,
-          idNumber: _citizenship == 'yes'
-              ? _idNumberController.text.trim()
-              : 'Passport-${_passportNumberController.text.trim()}',
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-          phone: _phoneController.text.trim(),
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OTPRegisterScreen(
+            fullName: fullName,
+            idNumber: idOrPassport,
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+            phone: _phoneController.text.trim(),
+          ),
         ),
-      ),
-    );
-
-    setState(() => _isLoading = false);
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error occurred: $e")),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   String? _validateIDNumber(String? value) {
@@ -90,21 +97,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final currentYear = DateTime.now().year;
       final fullYear = (year > currentYear % 100) ? 1900 + year : 2000 + year;
 
-      if (month < 1 || month > 12) return 'Invalid birth month in ID';
-
       final birthDate = DateTime(fullYear, month, day);
       if (birthDate.month != month || birthDate.day != day) {
         return 'Invalid birth date in ID';
       }
 
-      final today = DateTime.now();
-      final age = today.year -
-          birthDate.year -
-          ((today.month < birthDate.month ||
-                  (today.month == birthDate.month && today.day < birthDate.day))
-              ? 1
-              : 0);
-
+      final age = DateTime.now().difference(birthDate).inDays ~/ 365;
       if (age < 18) return 'Must be 18+ years old to register';
 
       return null;
@@ -122,22 +120,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   String? _validatePassword(String? val) {
-    if (val == null || val.isEmpty) {
-      return 'Password is required';
-    }
-    if (val.length < 8) {
-      return 'Password must be at least 8 characters long';
-    }
-    if (!RegExp(r'[A-Z]').hasMatch(val)) {
-      return 'Password must contain at least one uppercase letter';
-    }
-    if (!RegExp(r'[0-9]').hasMatch(val)) {
-      return 'Password must contain at least one digit';
-    }
+    if (val == null || val.isEmpty) return 'Password is required';
+    if (val.length < 8) return 'Min 8 characters';
+    if (!RegExp(r'[A-Z]').hasMatch(val)) return 'Add uppercase letter';
+    if (!RegExp(r'[0-9]').hasMatch(val)) return 'Add a number';
     if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(val)) {
-      return 'Password must contain at least one special character';
+      return 'Add a special character';
     }
     return null;
+  }
+
+  @override
+  void dispose() {
+    // Dispose controllers to avoid memory leaks
+    _nameController.dispose();
+    _surnameController.dispose();
+    _idNumberController.dispose();
+    _passportNumberController.dispose();
+    _nationalityController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _phoneController.dispose();
+    super.dispose();
   }
 
   @override
@@ -151,20 +156,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
             key: _formKey,
             child: Column(
               children: [
-                // Name
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(labelText: 'Name'),
                   validator: _validateName,
                 ),
-                // Surname
                 TextFormField(
                   controller: _surnameController,
                   decoration: const InputDecoration(labelText: 'Surname'),
                   validator: _validateName,
                 ),
-
-                // === Citizenship Selector ===
                 DropdownButtonFormField<String>(
                   decoration: const InputDecoration(
                       labelText: 'Are you a South African citizen?'),
@@ -177,8 +178,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       val == null ? 'Please select an option' : null,
                 ),
                 const SizedBox(height: 12),
-
-                // === ID Field ===
                 if (_citizenship == 'yes')
                   TextFormField(
                     controller: _idNumberController,
@@ -186,34 +185,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     validator: _validateIDNumber,
                     keyboardType: TextInputType.number,
                   ),
-
-                // === Passport Fields ===
                 if (_citizenship == 'no') ...[
                   TextFormField(
                     controller: _passportNumberController,
                     decoration:
                         const InputDecoration(labelText: 'Passport Number'),
-                    validator: (val) =>
-                        val!.isEmpty ? 'Enter your passport number' : null,
+                    validator: (val) => val == null || val.isEmpty
+                        ? 'Enter your passport number'
+                        : null,
                   ),
                   TextFormField(
                     controller: _nationalityController,
                     decoration: const InputDecoration(labelText: 'Nationality'),
                     validator: (val) =>
-                        val!.isEmpty ? 'Enter nationality' : null,
+                        val == null || val.isEmpty ? 'Enter nationality' : null,
                   ),
                 ],
-
                 const SizedBox(height: 12),
-
-                // Email
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(labelText: 'Email'),
-                  validator: (val) => val!.isEmpty ? 'Enter your email' : null,
+                  validator: (val) =>
+                      val == null || val.isEmpty ? 'Enter your email' : null,
                 ),
-
-                // Password
                 TextFormField(
                   controller: _passwordController,
                   decoration: const InputDecoration(labelText: 'Password'),
@@ -229,18 +223,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ? 'Passwords do not match'
                       : null,
                 ),
-
-                // Phone
                 TextFormField(
                   controller: _phoneController,
                   decoration:
                       const InputDecoration(labelText: 'Phone (+27...)'),
                   validator: (val) =>
-                      val!.isEmpty ? 'Enter phone number' : null,
+                      val == null || val.isEmpty ? 'Enter phone number' : null,
                 ),
-
                 const SizedBox(height: 20),
-
                 _isLoading
                     ? const CircularProgressIndicator()
                     : ElevatedButton(

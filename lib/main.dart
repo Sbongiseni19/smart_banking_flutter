@@ -17,43 +17,33 @@ import 'screens/previous_bookings_page.dart';
 import 'screens/pending_appointments_page.dart';
 import 'screens/reset_password_screen.dart';
 
-/// Only import these for web (to use `platformViewRegistry` and `DivElement`)
-/// This block avoids runtime crashes on mobile
-/// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-import 'dart:ui' as ui;
-import 'dart:ui_web' as ui;
+// Web-specific reCAPTCHA registration
+import 'web_view_registry_stub.dart'
+    if (dart.library.html) 'web_view_registry_web.dart';
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   print(
-      "🔔 [Background] Message: ${message.notification?.title} - ${message.notification?.body}");
+      "🔔 [Background] ${message.notification?.title} - ${message.notification?.body}");
 }
 
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Register background handler
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // Request notification permission
   NotificationSettings settings =
       await FirebaseMessaging.instance.requestPermission();
   print('🛡️ Permission granted: ${settings.authorizationStatus}');
 
-  // Get FCM token
   String? token = await FirebaseMessaging.instance.getToken();
   print("🔑 FCM Token: $token");
 
-  // ✅ Register reCAPTCHA container for web
   if (kIsWeb) {
-    ui.platformViewRegistry.registerViewFactory(
-      'recaptcha-container',
-      (int viewId) => html.DivElement()..id = 'recaptcha-container',
-    );
+    registerReCAPTCHAContainer();
   }
 
   runApp(const MyApp());
@@ -64,12 +54,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    FirebaseMessaging.onMessage.listen((message) {
       print(
           "📨 [Foreground] ${message.notification?.title} - ${message.notification?.body}");
     });
 
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
       print(
           "🟢 [Opened App] ${message.notification?.title} - ${message.notification?.body}");
     });
@@ -78,25 +68,48 @@ class MyApp extends StatelessWidget {
       title: 'Smart Banking App',
       debugShowCheckedModeBanner: false,
       initialRoute: '/',
-      routes: {
-        '/': (context) => const IndexPage(),
-        '/login': (context) => LoginScreen(),
-        '/register': (context) => RegisterScreen(),
-        '/dashboard': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments
-              as Map<String, dynamic>?;
-          final userName = args?['userName'] ?? 'Guest';
-          return DashboardScreen(userName: userName);
-        },
-        '/appointment': (context) => const AppointmentScreen(),
-        '/consultant_dashboard': (context) => const ConsultantDashboardScreen(),
-        '/verifyPhone': (context) => const PhoneVerificationScreen(),
-        '/bookSlot': (context) => const BookSlotPage(),
-        '/nearbyBanks': (context) => NearbyBanksPage(),
-        '/previousBookings': (context) => const PreviousBookingsPage(),
-        '/pendingAppointments': (context) => const PendingAppointmentsPage(),
-        '/phoneVerification': (context) => const PhoneVerificationScreen(),
-        '/resetPassword': (context) => const ResetPasswordScreen(),
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/':
+            return MaterialPageRoute(builder: (_) => const IndexPage());
+          case '/login':
+            return MaterialPageRoute(builder: (_) => LoginScreen());
+          case '/register':
+            return MaterialPageRoute(builder: (_) => RegisterScreen());
+          case '/dashboard':
+            final args = settings.arguments as Map<String, dynamic>? ?? {};
+            final userName = args['userName'] ?? 'Guest';
+            return MaterialPageRoute(
+              builder: (_) => DashboardScreen(userName: userName),
+            );
+          case '/appointment':
+            return MaterialPageRoute(builder: (_) => const AppointmentScreen());
+          case '/consultant_dashboard':
+            return MaterialPageRoute(
+                builder: (_) => const ConsultantDashboardScreen());
+          case '/verifyPhone':
+            return MaterialPageRoute(
+                builder: (_) => const PhoneVerificationScreen());
+          case '/bookSlot':
+            return MaterialPageRoute(builder: (_) => BookSlotPage());
+          case '/nearbyBanks':
+            return MaterialPageRoute(builder: (_) => NearbyBanksPage());
+          case '/previousBookings':
+            return MaterialPageRoute(
+                builder: (_) => const PreviousBookingsPage());
+          case '/pendingAppointments':
+            return MaterialPageRoute(
+                builder: (_) => const PendingAppointmentsPage());
+          case '/resetPassword':
+            return MaterialPageRoute(
+                builder: (_) => const ResetPasswordScreen());
+          default:
+            return MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: Center(child: Text('404 - Page Not Found')),
+              ),
+            );
+        }
       },
     );
   }

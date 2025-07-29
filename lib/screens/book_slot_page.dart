@@ -1,360 +1,298 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 class BookSlotPage extends StatefulWidget {
-  const BookSlotPage({super.key});
-
   @override
-  State<BookSlotPage> createState() => _BookSlotPageState();
+  _BookSlotPageState createState() => _BookSlotPageState();
 }
 
 class _BookSlotPageState extends State<BookSlotPage> {
   final _formKey = GlobalKey<FormState>();
 
-  final nameController = TextEditingController();
-  final emailController = TextEditingController();
-  final idController = TextEditingController();
+  String? _userName;
+  String? _userID;
+  String? _userEmail;
 
-  String? selectedBranch;
-  String? selectedService;
-  DateTime? selectedDate;
-  TimeOfDay? selectedTime;
+  String? _selectedBank;
+  String? _selectedBranch;
 
-  List<String> nearestBranches = [];
-  String? selectedNearestBranch;
+  Position? _currentPosition;
 
-  final List<String> branches = [
-    'Capitec',
-    'Standard Bank',
-    'ABSA',
-    'FNB',
-    'Nedbank',
-  ];
+  List<String> banks = ['Capitec', 'FNB', 'Standard Bank'];
+  List<String> branches = [];
 
-  final List<String> services = [
-    'Open New Account',
-    'Loan Application',
-    'Card Replacement',
-    'Update Personal Details',
-    'Fraud Report',
-  ];
+  bool _loadingUser = true;
+  bool _loadingBranches = false;
+  bool _locationPermissionDenied = false;
 
-  // Replace this with your actual Google Places API key
-  final String googleApiKey = 'AIzaSyCgDsWsGkj8wEEzomITwJu4FzsXtb2F_lw';
+  static const String googleApiKey = 'AIzaSyCgDsWsGkj8wEEzomITwJu4FzsXtb2F_lw';
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _fetchUserDetails();
+    _determinePosition();
   }
 
-  Future<void> _loadUserData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      if (doc.exists) {
-        final data = doc.data()!;
-        setState(() {
-          nameController.text = data['name'] ?? '';
-          idController.text = data['idNumber'] ?? '';
-          emailController.text = user.email ?? '';
-        });
-      } else {
-        // If no user doc, fill email from auth
-        setState(() {
-          emailController.text = user.email ?? '';
-        });
-      }
-    }
-  }
-
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: now,
-      lastDate: DateTime(now.year + 1),
-    );
-    if (picked != null) {
-      setState(() => selectedDate = picked);
-    }
-  }
-
-  Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
-    if (picked != null) {
-      setState(() => selectedTime = picked);
-    }
-  }
-
-  Future<Position?> _determinePosition() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enable location services.')),
-      );
-      return null;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permission denied')),
-        );
-        return null;
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Location permissions are permanently denied')),
-      );
-      return null;
-    }
-
-    return await Geolocator.getCurrentPosition();
-  }
-
-  Future<void> _searchNearestBranches() async {
-    if (selectedBranch == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a bank branch first.')),
-      );
+  Future<void> _fetchUserDetails() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      setState(() {
+        _loadingUser = false;
+      });
       return;
     }
 
-    final position = await _determinePosition();
-    if (position == null) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
 
-    final lat = position.latitude;
-    final lng = position.longitude;
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          _userName = data['name'] ?? currentUser.displayName ?? '';
+          _userID = data['id_number'] ?? '';
+          _userEmail = data['email'] ?? currentUser.email ?? '';
+          _loadingUser = false;
+        });
+      } else {
+        setState(() {
+          _userName = currentUser.displayName ?? '';
+          _userID = '';
+          _userEmail = currentUser.email ?? '';
+          _loadingUser = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _userName = FirebaseAuth.instance.currentUser?.displayName ?? '';
+        _userID = '';
+        _userEmail = FirebaseAuth.instance.currentUser?.email ?? '';
+        _loadingUser = false;
+      });
+    }
+  }
 
+  Future<void> _determinePosition() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    // Test if location services are enabled.
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      setState(() {
+        _locationPermissionDenied = true;
+      });
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.deniedForever) {
+      setState(() {
+        _locationPermissionDenied = true;
+      });
+      return;
+    }
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission != LocationPermission.whileInUse &&
+          permission != LocationPermission.always) {
+        setState(() {
+          _locationPermissionDenied = true;
+        });
+        return;
+      }
+    }
+
+    final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
+    setState(() {
+      _currentPosition = pos;
+      _locationPermissionDenied = false;
+    });
+  }
+
+  Future<List<String>> fetchNearbyBranches(
+      String bankName, double lat, double lng) async {
     final url =
-        Uri.parse('https://maps.googleapis.com/maps/api/place/nearbysearch/json'
-            '?location=$lat,$lng'
-            '&radius=5000'
-            '&keyword=$selectedBranch branch'
-            '&key=$googleApiKey');
+        'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$lat,$lng&radius=5000&keyword=$bankName&key=$googleApiKey';
 
-    final response = await http.get(url);
+    final response = await http.get(Uri.parse(url));
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
-      List results = data['results'];
-      setState(() {
-        nearestBranches =
-            results.map<String>((place) => place['name'] as String).toList();
-        selectedNearestBranch = null;
-      });
+      final results = data['results'] as List<dynamic>;
+
+      // Return unique branch names sorted by proximity
+      List<String> fetchedBranches =
+          results.map((place) => place['name'] as String).toSet().toList();
+      return fetchedBranches;
     } else {
+      throw Exception('Failed to fetch nearby branches');
+    }
+  }
+
+  Future<void> _onBankChanged(String? bank) async {
+    if (bank == null || _currentPosition == null) {
+      setState(() {
+        branches = [];
+        _selectedBranch = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedBank = bank;
+      _selectedBranch = null;
+      _loadingBranches = true;
+      branches = [];
+    });
+
+    try {
+      List<String> nearbyBranches = await fetchNearbyBranches(
+          bank, _currentPosition!.latitude, _currentPosition!.longitude);
+
+      setState(() {
+        branches = nearbyBranches;
+        _loadingBranches = false;
+      });
+    } catch (e) {
+      setState(() {
+        branches = [];
+        _loadingBranches = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to fetch nearby branches')),
-      );
+          SnackBar(content: Text('Failed to fetch branches: $e')));
     }
   }
 
   Future<void> _submitBooking() async {
-    final user = FirebaseAuth.instance.currentUser;
+    if (!_formKey.currentState!.validate()) return;
 
-    if (user == null) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please log in before booking.')),
+        SnackBar(content: Text('You must be logged in to book a slot.')),
       );
       return;
     }
 
-    if (_formKey.currentState!.validate()) {
-      if (selectedDate == null || selectedTime == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select both date and time.')),
-        );
-        return;
-      }
+    await FirebaseFirestore.instance.collection('bookings').add({
+      'userId': currentUser.uid,
+      'name': _userName ?? '',
+      'id_number': _userID ?? '',
+      'email': _userEmail ?? '',
+      'bank': _selectedBank,
+      'branch': _selectedBranch,
+      'status': 'pending',
+      'dateTime': FieldValue.serverTimestamp(),
+    });
 
-      if (selectedNearestBranch == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select the nearest branch.')),
-        );
-        return;
-      }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Booking submitted successfully!')),
+    );
 
-      await FirebaseFirestore.instance.collection('bookings').add({
-        'userId': user.uid,
-        'userName': nameController.text.trim(),
-        'email': emailController.text.trim(),
-        'idNumber': idController.text.trim(),
-        'bank': selectedBranch,
-        'nearestBranch': selectedNearestBranch,
-        'service': selectedService,
-        'status': 'Pending',
-        'dateTime': DateTime(
-          selectedDate!.year,
-          selectedDate!.month,
-          selectedDate!.day,
-          selectedTime!.hour,
-          selectedTime!.minute,
-        ),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ Booking submitted successfully!')),
-      );
-
-      _formKey.currentState!.reset();
-      setState(() {
-        selectedBranch = null;
-        selectedService = null;
-        selectedDate = null;
-        selectedTime = null;
-        nearestBranches.clear();
-        selectedNearestBranch = null;
-      });
-    }
-  }
-
-  String? _validateId(String? value) {
-    if (value == null || value.isEmpty) return 'Required';
-    if (value.length != 13) return 'ID must be 13 digits';
-    if (!RegExp(r'^\d{13}$').hasMatch(value)) return 'ID must be numeric only';
-    return null;
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
+    if (_loadingUser) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Book Appointment')),
-        body: const Center(
-          child: Text('Please log in to book an appointment.'),
+        appBar: AppBar(title: Text('Book Banking Slot')),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_locationPermissionDenied) {
+      return Scaffold(
+        appBar: AppBar(title: Text('Book Banking Slot')),
+        body: Center(
+          child: Text(
+            'Location permission denied. Please enable location to find nearest branches.',
+            style: TextStyle(color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-          title: const Text('Book Appointment'),
-          backgroundColor: Colors.indigo),
+      appBar: AppBar(title: Text('Book Banking Slot')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Full Name'),
-                  validator: (val) => val!.isEmpty ? 'Required' : null,
-                ),
-                TextFormField(
-                  controller: emailController,
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  validator: (val) => val!.isEmpty ? 'Required' : null,
-                ),
-                TextFormField(
-                  controller: idController,
-                  decoration: const InputDecoration(labelText: 'ID Number'),
-                  keyboardType: TextInputType.number,
-                  validator: _validateId,
-                ),
-                DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(labelText: 'Bank Branch'),
-                  value: selectedBranch,
-                  items: branches.map((branch) {
-                    return DropdownMenuItem(value: branch, child: Text(branch));
-                  }).toList(),
-                  onChanged: (val) => setState(() => selectedBranch = val),
-                  validator: (val) =>
-                      val == null ? 'Please select a branch' : null,
-                ),
-                const SizedBox(height: 8),
-                ElevatedButton(
-                  onPressed: _searchNearestBranches,
-                  child: const Text('Find Nearest Branches'),
-                ),
-                if (nearestBranches.isNotEmpty)
-                  DropdownButtonFormField<String>(
-                    decoration:
-                        const InputDecoration(labelText: 'Nearest Branch'),
-                    value: selectedNearestBranch,
-                    items: nearestBranches.map((branchName) {
-                      return DropdownMenuItem(
-                        value: branchName,
-                        child: Text(branchName),
-                      );
-                    }).toList(),
-                    onChanged: (val) =>
-                        setState(() => selectedNearestBranch = val),
-                    validator: (val) =>
-                        val == null ? 'Please select a nearest branch' : null,
-                  ),
-                DropdownButtonFormField<String>(
-                  decoration:
-                      const InputDecoration(labelText: 'Service Required'),
-                  value: selectedService,
-                  items: services.map((service) {
-                    return DropdownMenuItem(
-                        value: service, child: Text(service));
-                  }).toList(),
-                  onChanged: (val) => setState(() => selectedService = val),
-                  validator: (val) =>
-                      val == null ? 'Please select a service' : null,
-                ),
-                const SizedBox(height: 16),
-                Row(
+        child: _userName == null
+            ? Center(child: Text('User data not found'))
+            : Form(
+                key: _formKey,
+                child: ListView(
                   children: [
-                    Expanded(
-                      child: Text(selectedDate == null
-                          ? 'No date selected'
-                          : 'Date: ${selectedDate!.toLocal().toString().split(' ')[0]}'),
+                    TextFormField(
+                      initialValue: _userName,
+                      readOnly: true,
+                      decoration: InputDecoration(labelText: 'Full Name'),
                     ),
+                    TextFormField(
+                      initialValue: _userID,
+                      readOnly: true,
+                      decoration: InputDecoration(labelText: 'ID Number'),
+                    ),
+                    TextFormField(
+                      initialValue: _userEmail,
+                      readOnly: true,
+                      decoration: InputDecoration(labelText: 'Email'),
+                    ),
+                    SizedBox(height: 20),
+                    DropdownButtonFormField<String>(
+                      value: _selectedBank,
+                      decoration: InputDecoration(labelText: 'Select Bank'),
+                      items: banks
+                          .map(
+                            (bank) => DropdownMenuItem(
+                              value: bank,
+                              child: Text(bank),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: _onBankChanged,
+                      validator: (value) =>
+                          value == null ? 'Please select a bank' : null,
+                    ),
+                    SizedBox(height: 20),
+                    if (_loadingBranches)
+                      Center(child: CircularProgressIndicator()),
+                    if (!_loadingBranches && branches.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        value: _selectedBranch,
+                        decoration: InputDecoration(labelText: 'Select Branch'),
+                        items: branches
+                            .map(
+                              (branch) => DropdownMenuItem(
+                                value: branch,
+                                child: Text(branch),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedBranch = val),
+                        validator: (value) =>
+                            value == null ? 'Please select a branch' : null,
+                      ),
+                    SizedBox(height: 40),
                     ElevatedButton(
-                        onPressed: _pickDate, child: const Text('Pick Date')),
+                      onPressed: _submitBooking,
+                      child: Text('Submit Booking'),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(selectedTime == null
-                          ? 'No time selected'
-                          : 'Time: ${selectedTime!.format(context)}'),
-                    ),
-                    ElevatedButton(
-                        onPressed: _pickTime, child: const Text('Pick Time')),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _submitBooking,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(255, 73, 75, 84),
-                  ),
-                  child: const Text('Submit Booking'),
-                ),
-              ],
-            ),
-          ),
-        ),
+              ),
       ),
     );
   }

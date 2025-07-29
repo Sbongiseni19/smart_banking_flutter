@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import 'book_slot_page.dart';
@@ -12,9 +13,9 @@ import 'pending_appointments_page.dart';
 import 'login_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final String userName;
+  final String? userName;
 
-  const DashboardScreen({super.key, required this.userName});
+  const DashboardScreen({super.key, this.userName});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -30,9 +31,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late stt.SpeechToText _speech;
   bool _isVoiceEnabled = false;
 
+  String? _userName;
+  bool _loadingUserName = true;
+
   @override
   void initState() {
     super.initState();
+    _fetchUserName();
     _initLocationService();
     _speech = stt.SpeechToText();
     _initVoiceAssistant();
@@ -42,6 +47,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _positionStream?.cancel();
     super.dispose();
+  }
+
+  Future<void> _fetchUserName() async {
+    if (widget.userName != null) {
+      setState(() {
+        _userName = widget.userName;
+        _loadingUserName = false;
+      });
+      return;
+    }
+
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      setState(() {
+        _userName = null;
+        _loadingUserName = false;
+      });
+      return;
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          // Fixed here: use 'name' to match your Firestore user data field
+          _userName = data['name'] ?? currentUser.displayName ?? 'User';
+          _loadingUserName = false;
+        });
+      } else {
+        setState(() {
+          _userName = currentUser.displayName ?? 'User';
+          _loadingUserName = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _userName = FirebaseAuth.instance.currentUser?.displayName ?? 'User';
+        _loadingUserName = false;
+      });
+    }
   }
 
   Future<void> _initLocationService() async {
@@ -105,10 +155,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "${place.street}, ${place.locality}, ${place.administrativeArea}, ${place.country}";
         _updateLocationState(address, false);
       } else {
-        _updateLocationState(" ", true);
+        _updateLocationState("Unable to fetch address", true);
       }
     } catch (e) {
-      _updateLocationState(" ", true);
+      _updateLocationState("Unable to fetch address", true);
     }
   }
 
@@ -136,7 +186,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _handleVoiceCommand(String command) {
     if (command.contains("book")) {
       Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const BookSlotPage()));
+          context, MaterialPageRoute(builder: (_) => BookSlotPage()));
     } else if (command.contains("nearby")) {
       Navigator.push(
           context, MaterialPageRoute(builder: (_) => NearbyBanksPage()));
@@ -201,14 +251,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingUserName) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final displayName = _userName ?? 'Guest';
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.indigo,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Welcome, ${widget.userName}',
-                style: const TextStyle(fontSize: 18)),
+            Text('Welcome, $displayName', style: const TextStyle(fontSize: 18)),
             const SizedBox(height: 2),
             Builder(
               builder: (_) {
@@ -260,7 +317,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildDashboardTile(
               icon: Icons.calendar_month,
               label: 'Book Slot',
-              route: const BookSlotPage(),
+              route: BookSlotPage(),
             ),
             _buildDashboardTile(
               icon: Icons.location_on,

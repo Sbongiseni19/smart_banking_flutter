@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   provider: ^6.1.1
-  http: ^1.2.0
+  http: ^0.13.6 
   geolocator: ^14.0.1
   speech_to_text: ^7.0.0
   flutter_tts: ^4.0.2
@@ -30,6 +30,11 @@ dependencies:
   path_provider: ^2.1.1
   path: ^1.8.3
   firebase_storage: 12.4.6
+  google_places_api_flutter: ^2.0.0
+  google_maps_flutter: ^2.6.0
+  google_place: ^0.4.7
+  js: ^0.6.7
+
 
 
 
